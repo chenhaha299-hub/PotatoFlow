@@ -374,7 +374,7 @@ export default function PotatoFlowApp() {
       <main className={styles.main}>
         <header className={styles.topbar}>
           <div>
-            <p className={styles.eyebrow}>单人 · 自托管 · 可开源</p>
+            <p className={styles.eyebrow}>个人数据仅部署者可见</p>
             <h1>{NAV_ITEMS.find((item) => item.id === activeTab)?.label}</h1>
           </div>
           <div className={styles.topActions}>
