@@ -49,7 +49,7 @@ test("source keeps the app empty and local-first", async () => {
   assert.match(app, /projects:\s*\[\]/);
   assert.match(app, /tasks:\s*\[\]/);
   assert.match(app, /issues:\s*\[\]/);
-  assert.match(app, /个人数据仅部署者可见/);
+  assert.match(app, /个人上传数据仅本人可见/);
   assert.match(app, /localStorage/);
   assert.match(layout, /PotatoFlow/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
