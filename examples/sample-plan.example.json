@@ -1,0 +1,67 @@
+{
+  "project": {
+    "id": "sample-research-project",
+    "name": "公开资料整理示例",
+    "objective": "把分散的公开资料整理成可检索的主题目录",
+    "success_criteria": [
+      "资料使用统一命名规则",
+      "每条资料都能追溯公开来源",
+      "完成一次目录结构复盘"
+    ],
+    "background": "这是完全虚构的通用示例，不包含任何用户数据。",
+    "constraints": [
+      "单人执行",
+      "只整理公开信息"
+    ],
+    "assumptions": [
+      "首轮只处理一个主题"
+    ]
+  },
+  "tasks": [
+    {
+      "id": "define-catalog",
+      "parent_id": null,
+      "milestone": "完成目录基础结构",
+      "title": "定义资料目录字段",
+      "objective": "建立可以统一记录公开资料的字段结构",
+      "why": "先统一字段可以减少后续返工",
+      "steps": [
+        "列出需要记录的信息",
+        "确定必填字段",
+        "录入两条虚构样例验证结构"
+      ],
+      "acceptance_criteria": [
+        "字段名称没有重复",
+        "两条虚构样例均能完整录入"
+      ],
+      "scheduled_date": "2026-07-28",
+      "estimated_minutes": 45,
+      "priority": 1,
+      "dependencies": []
+    },
+    {
+      "id": "review-catalog",
+      "parent_id": null,
+      "milestone": "验证目录可用性",
+      "title": "检查目录结构",
+      "objective": "确认目录可以支持查找和后续扩展",
+      "why": "先用少量虚构数据验证结构，避免错误扩散",
+      "steps": [
+        "按主题筛选虚构样例",
+        "检查来源字段",
+        "记录需要调整的字段"
+      ],
+      "acceptance_criteria": [
+        "能够按主题找到虚构样例",
+        "每条样例都有来源字段",
+        "形成字段调整记录"
+      ],
+      "scheduled_date": "2026-07-29",
+      "estimated_minutes": 30,
+      "priority": 2,
+      "dependencies": [
+        "define-catalog"
+      ]
+    }
+  ]
+}

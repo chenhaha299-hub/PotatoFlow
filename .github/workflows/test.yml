@@ -1,0 +1,44 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  skill:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Exercise CLI
+        run: |
+          python skills/potatoflow/scripts/potatoflow.py validate-plan --input examples/sample-plan.example.json
+          python skills/potatoflow/scripts/potatoflow.py import-plan --input examples/sample-plan.example.json --data .potatoflow/data.json
+          python skills/potatoflow/scripts/potatoflow.py today --date 2026-07-28 --data .potatoflow/data.json
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Test production build
+        working-directory: apps/web
+        run: npm test

@@ -1,0 +1,11 @@
+.potatoflow/
+.env
+.env.*
+!.env.example
+.build-deps/
+.site-initializer-git-backup/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+Thumbs.db

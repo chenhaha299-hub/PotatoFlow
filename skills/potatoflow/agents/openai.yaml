@@ -1,0 +1,4 @@
+interface:
+  display_name: "PotatoFlow 项目执行系统"
+  short_description: "将讨论整理成项目、任务和日程，并持续记录执行问题与复盘结果"
+  default_prompt: "Use $potatoflow to turn this discussion into a structured project plan and prepare it for my execution calendar."
