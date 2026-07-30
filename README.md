@@ -4,6 +4,11 @@ PotatoFlow 是一个面向单人使用、可自行部署的项目执行系统。
 
 当前版本实现了可运行的 Skill 核心和响应式网页。网页以空白状态启动，数据只保存在当前浏览器；Cloudflare Worker 和 D1 连接层将在后续版本加入。
 
+## 新手从这里开始
+
+- [零基础下载与使用教程](docs/BEGINNER_GUIDE.zh-CN.md)
+- [下载 PotatoFlow v0.6.1](https://github.com/chenhaha299-hub/PotatoFlow/releases/tag/v0.6.1)
+
 ## 当前能力
 
 - 校验并导入结构化项目计划
