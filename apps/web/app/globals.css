@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+:root {
+  --ink: #1d211d;
+  --muted: #6c736c;
+  --line: #e4e7df;
+  --paper: #f7f8f3;
+  --panel: #ffffff;
+  --green: #1f6a49;
+  --green-soft: #e3f0e8;
+  --lime: #dff35c;
+  --orange: #f2a55f;
+  --shadow: 0 18px 60px rgba(35, 48, 38, 0.08);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--paper);
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(circle at 86% 8%, rgba(223, 243, 92, 0.2), transparent 24rem),
+    var(--paper);
+  color: var(--ink);
+  font-family:
+    Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+}
+
+button,
+textarea,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+::selection {
+  background: var(--lime);
+  color: var(--ink);
+}

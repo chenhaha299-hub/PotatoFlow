@@ -1,0 +1,93 @@
+{
+  "project": {
+    "id": "sample-research-project",
+    "revision": 1,
+    "name": "公开资料整理示例",
+    "objective": "把分散的公开资料整理成可检索的主题目录",
+    "success_criteria": [
+      "资料使用统一命名规则",
+      "每条资料都能追溯公开来源",
+      "完成一次目录结构复盘"
+    ],
+    "background": "这是完全虚构的通用示例，不包含任何用户数据。",
+    "constraints": [
+      "单人执行",
+      "只整理公开信息"
+    ],
+    "assumptions": [
+      "首轮只处理一个主题"
+    ],
+    "execution_tip_title": "今天先把目录结构跑通。",
+    "execution_tips": [
+      "先完成字段设计，再录入样例。",
+      "遇到无法归类的资料时立即记录。",
+      "没有通过样例验证前，不批量整理。"
+    ],
+    "source_file_mode": "shared",
+    "source_file_requirements": [
+      {
+        "id": "public-research-source",
+        "label": "公开资料原文",
+        "description": "两条任务共同查阅的虚构公开资料"
+      }
+    ]
+  },
+  "tasks": [
+    {
+      "id": "define-catalog",
+      "parent_id": null,
+      "milestone": "完成目录基础结构",
+      "title": "定义资料目录字段",
+      "objective": "建立可以统一记录公开资料的字段结构",
+      "why": "先统一字段可以减少后续返工",
+      "note": "先用少量虚构样例验证，不要直接批量录入。",
+      "steps": [
+        "列出需要记录的信息",
+        "确定必填字段",
+        "录入两条虚构样例验证结构"
+      ],
+      "acceptance_criteria": [
+        "字段名称没有重复",
+        "两条虚构样例均能完整录入"
+      ],
+      "scheduled_date": "2026-07-28",
+      "estimated_minutes": 45,
+      "priority": 1,
+      "category": "work",
+      "source_file_refs": ["public-research-source"],
+      "dependencies": []
+    },
+    {
+      "id": "review-catalog",
+      "parent_id": null,
+      "milestone": "验证目录可用性",
+      "title": "检查目录结构",
+      "objective": "确认目录可以支持查找和后续扩展",
+      "why": "先用少量虚构数据验证结构，避免错误扩散",
+      "steps": [
+        "按主题筛选虚构样例",
+        "检查来源字段",
+        "记录需要调整的字段"
+      ],
+      "acceptance_criteria": [
+        "能够按主题找到虚构样例",
+        "每条样例都有来源字段",
+        "形成字段调整记录"
+      ],
+      "scheduled_date": "2026-07-29",
+      "estimated_minutes": 30,
+      "priority": 2,
+      "category": "work",
+      "source_file_refs": ["public-research-source"],
+      "dependencies": [
+        "define-catalog"
+      ]
+    }
+  ],
+  "deleted_task_ids": [],
+  "import_metadata": {
+    "base_project_id": "sample-research-project",
+    "base_project_revision": 1,
+    "generated_at": "2026-07-28T09:00:00+08:00"
+  }
+}

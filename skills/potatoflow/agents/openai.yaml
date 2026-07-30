@@ -1,0 +1,4 @@
+interface:
+  display_name: "PotatoFlow 项目执行系统"
+  short_description: "建档、排期、执行诊断、复盘与隐私安全的 PotatoFlow JSON"
+  default_prompt: "使用 $potatoflow 帮我管理 PotatoFlow；若当前无法识别此 Skill，请先提醒我完成安装，确认可用后再按新建、更新、问题分析、复盘或恢复流程处理。"
