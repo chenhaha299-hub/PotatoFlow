@@ -64,6 +64,8 @@ test("sync comparison ignores internal revision metadata", async () => {
   assert.match(app, /POSITIONAL_BOOLEAN_ARRAYS/);
   assert.match(app, /isEmptySemanticValue/);
   assert.match(app, /semanticStore/);
+  assert.match(app, /hasMeaningfulLogicGraphData/);
+  assert.match(app, /page\.id !== "inbox"/);
   assert.match(app, /legacyManualDone/);
   assert.match(app, /legacyReportsToTaskReport\(task\.steps, task\.step_reports\)/);
   assert.match(app, /LOCAL_UPDATED_AT_KEY/);

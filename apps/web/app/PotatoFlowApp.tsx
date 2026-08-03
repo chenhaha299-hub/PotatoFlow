@@ -484,14 +484,23 @@ function storeForSync(value: Store): Store {
   return { ...value, export_meta: undefined };
 }
 
+function hasMeaningfulLogicGraphData(value: Store) {
+  return (value.logic_graph_pages || []).some(
+    (page) =>
+      page.id !== "inbox" ||
+      page.title !== "灵感收集" ||
+      page.nodes.length > 0 ||
+      page.edges.length > 0 ||
+      Boolean(page.parentPageId),
+  );
+}
+
 function storeHasContent(value: Store) {
   return (
     value.projects.length > 0 ||
     value.tasks.length > 0 ||
     value.issues.length > 0 ||
-    (value.logic_graph_pages || []).some(
-      (page) => page.id !== "inbox" || page.nodes.length > 0 || page.edges.length > 0,
-    )
+    hasMeaningfulLogicGraphData(value)
   );
 }
 
@@ -529,6 +538,9 @@ const POSITIONAL_TEXT_ARRAYS = new Set(["step_reports"]);
 function semanticStore(value: Store) {
   return {
     ...storeForSync(value),
+    logic_graph_pages: hasMeaningfulLogicGraphData(value)
+      ? value.logic_graph_pages
+      : undefined,
     projects: value.projects.map((project) =>
       Object.fromEntries(
         Object.entries(project).filter(([key]) => key !== "status"),
