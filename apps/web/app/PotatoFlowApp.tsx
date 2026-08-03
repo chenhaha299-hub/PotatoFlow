@@ -1391,6 +1391,7 @@ export default function PotatoFlowApp({
   );
   const [syncError, setSyncError] = useState("");
   const [syncChoice, setSyncChoice] = useState<SyncChoice | null>(null);
+  const [selectedSyncCopy, setSelectedSyncCopy] = useState<"local" | "cloud" | null>(null);
   const [cloudRevision, setCloudRevision] = useState(0);
   const [syncRetry, setSyncRetry] = useState(0);
   const syncReadyRef = useRef(false);
@@ -1534,6 +1535,7 @@ export default function PotatoFlowApp({
             setCloudRevision(data.revision || cloudRevision);
             syncReadyRef.current = true;
             setSyncChoice(null);
+            setSelectedSyncCopy(null);
             setSyncError("");
             setSyncStatus("ready");
             return;
@@ -1571,7 +1573,7 @@ export default function PotatoFlowApp({
     return () => window.clearTimeout(timer);
   }, [store, hydrated, syncEnabled, cloudRevision, syncChoice]);
 
-  function useCloudCopy() {
+  function applyCloudCopy() {
     if (!syncChoice?.cloudStore) return;
     if (storeHasContent(store)) {
       saveImportSnapshot(store, "切换云端数据前的本机备份");
@@ -1583,6 +1585,7 @@ export default function PotatoFlowApp({
     setCloudRevision(syncChoice.cloudRevision);
     syncReadyRef.current = true;
     setSyncChoice(null);
+    setSelectedSyncCopy(null);
     setSyncError("");
     setSyncStatus("ready");
   }
@@ -1614,6 +1617,7 @@ export default function PotatoFlowApp({
           setCloudRevision(data.revision || syncChoice.cloudRevision);
           syncReadyRef.current = true;
           setSyncChoice(null);
+          setSelectedSyncCopy(null);
           setSyncStatus("ready");
           return;
         }
@@ -1634,6 +1638,7 @@ export default function PotatoFlowApp({
       setCloudRevision(data.revision);
       syncReadyRef.current = true;
       setSyncChoice(null);
+      setSelectedSyncCopy(null);
       setSyncStatus("ready");
     } catch (error) {
       setSyncError(
@@ -3944,6 +3949,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
           : cloudSyncTime > localSyncTime
             ? "cloud"
             : "same-time";
+  const effectiveSyncCopy =
+    selectedSyncCopy ||
+    (recommendedSyncCopy === "cloud" && syncChoice?.cloudStore ? "cloud" : "local");
 
   if (!hydrated) {
     return (
@@ -4000,7 +4008,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       <main className={styles.main}>
         <header className={styles.topbar}>
           <div>
-            <p className={styles.eyebrow}>个人上传数据仅本人可见</p>
+            <p className={styles.eyebrow}>上传数据仅本人可见</p>
             <h1>
               {activeTab === "today"
                 ? relativeDateTitle(selectedDate)
@@ -7258,32 +7266,41 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </span>
             </div>
             <div className={styles.syncComparison}>
-              <div
-                className={
-                  recommendedSyncCopy === "local"
-                    ? styles.syncCopyRecommended
-                    : ""
-                }
+              <button
+                type="button"
+                aria-pressed={effectiveSyncCopy === "local"}
+                className={`${
+                  recommendedSyncCopy === "local" ? styles.syncCopyRecommended : ""
+                } ${effectiveSyncCopy === "local" ? styles.syncCopySelected : ""}`}
+                onClick={() => setSelectedSyncCopy("local")}
               >
                 <span>
                   本机数据
-                  {recommendedSyncCopy === "local" && <b>较新版本</b>}
+                  <i>
+                    {recommendedSyncCopy === "local" && <b>较新版本</b>}
+                    {effectiveSyncCopy === "local" && <em>已选择</em>}
+                  </i>
                 </span>
                 <strong>
                   {store.projects.length} 个项目 · {store.tasks.length} 项任务
                 </strong>
                 <small>最后修改：{formatSyncTime(syncChoice.localUpdatedAt)}</small>
-              </div>
-              <div
-                className={
-                  recommendedSyncCopy === "cloud"
-                    ? styles.syncCopyRecommended
-                    : ""
-                }
+              </button>
+              <button
+                type="button"
+                aria-pressed={effectiveSyncCopy === "cloud"}
+                disabled={!syncChoice.cloudStore}
+                className={`${
+                  recommendedSyncCopy === "cloud" ? styles.syncCopyRecommended : ""
+                } ${effectiveSyncCopy === "cloud" ? styles.syncCopySelected : ""}`}
+                onClick={() => setSelectedSyncCopy("cloud")}
               >
                 <span>
                   云端数据
-                  {recommendedSyncCopy === "cloud" && <b>较新版本</b>}
+                  <i>
+                    {recommendedSyncCopy === "cloud" && <b>较新版本</b>}
+                    {effectiveSyncCopy === "cloud" && <em>已选择</em>}
+                  </i>
                 </span>
                 <strong>
                   {syncChoice.cloudStore
@@ -7291,7 +7308,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     : "目前为空"}
                 </strong>
                 <small>最后修改：{formatSyncTime(syncChoice.cloudUpdatedAt)}</small>
-              </div>
+              </button>
             </div>
             {syncError && <p className={styles.syncError}>{syncError}</p>}
             <div className={styles.confirmActions}>
@@ -7300,36 +7317,23 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 onClick={() => {
                   syncReadyRef.current = false;
                   setSyncChoice(null);
+                  setSelectedSyncCopy(null);
                   setSyncStatus("local");
                 }}
               >
                 暂时只用本机
               </button>
-              {syncChoice.cloudStore && (
-                <button
-                  className={
-                    recommendedSyncCopy === "cloud"
-                      ? styles.primaryButton
-                      : styles.quietButton
-                  }
-                  onClick={useCloudCopy}
-                >
-                  {recommendedSyncCopy === "cloud"
-                    ? "使用较新的云端数据"
-                    : "使用云端数据"}
-                </button>
-              )}
               <button
-                className={
-                  recommendedSyncCopy === "cloud"
-                    ? styles.quietButton
-                    : styles.primaryButton
+                className={styles.primaryButton}
+                onClick={() =>
+                  effectiveSyncCopy === "cloud"
+                    ? applyCloudCopy()
+                    : void uploadLocalCopy()
                 }
-                onClick={() => void uploadLocalCopy()}
               >
-                {recommendedSyncCopy === "local"
-                  ? "使用较新的本机数据并同步"
-                  : "上传本机数据并开启同步"}
+                {effectiveSyncCopy === "cloud"
+                  ? "使用所选的云端数据"
+                  : "使用所选的本机数据并同步"}
               </button>
             </div>
           </section>

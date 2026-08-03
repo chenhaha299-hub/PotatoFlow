@@ -1929,19 +1929,38 @@
   margin-top: 18px;
 }
 
-.syncComparison > div {
+.syncComparison > button {
   display: grid;
+  width: 100%;
   gap: 6px;
   border: 1px solid var(--line);
   border-radius: 13px;
   background: #f8faf6;
+  color: var(--ink);
   padding: 13px;
+  text-align: left;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
 .syncComparison .syncCopyRecommended {
   border-color: #79ad8c;
   background: linear-gradient(145deg, #e8f5eb, #fbfefb);
   box-shadow: 0 7px 18px rgba(38, 105, 65, 0.09);
+}
+
+.syncComparison > button:hover:not(:disabled) {
+  border-color: #8caf98;
+  transform: translateY(-1px);
+}
+
+.syncComparison .syncCopySelected {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(31, 106, 73, 0.12), 0 9px 24px rgba(38, 105, 65, 0.1);
+}
+
+.syncComparison > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .syncComparison span {
@@ -1960,6 +1979,24 @@
   color: #24663e;
   padding: 3px 7px;
   font-size: 11px;
+  white-space: nowrap;
+}
+
+.syncComparison span i {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  font-style: normal;
+}
+
+.syncComparison span em {
+  border-radius: 999px;
+  background: var(--green);
+  color: white;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-style: normal;
   white-space: nowrap;
 }
 
@@ -4853,9 +4890,9 @@
 .logicGraphToolbar {
   position: relative;
   z-index: 6;
-  display: grid;
-  grid-template-columns: auto minmax(120px, 0.7fr) minmax(180px, 1fr) auto auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 14px;
   border-bottom: 1px solid var(--line);
   background:
@@ -4877,7 +4914,14 @@
   font-weight: 800;
 }
 
-.logicGraphToolbar > div:nth-child(2) {
+.logicGraphIdentity {
+  display: flex;
+  min-width: 220px;
+  align-items: center;
+  gap: 12px;
+}
+
+.logicGraphTitle {
   display: grid;
   min-width: 0;
   gap: 2px;
@@ -4888,7 +4932,7 @@
   font-size: 12px;
 }
 
-.logicGraphToolbar > div:nth-child(2) small {
+.logicGraphTitle small {
   justify-self: start;
   border-radius: 999px;
   background: var(--logic-level-soft);
@@ -4905,11 +4949,20 @@
   white-space: nowrap;
 }
 
+.logicGraphActions {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .logicPageSwitcher {
   position: relative;
   display: grid;
   min-width: 0;
   gap: 3px;
+  width: clamp(180px, 25vw, 260px);
 }
 
 .logicPageSwitcher > span {
@@ -4999,6 +5052,12 @@
   display: flex;
   align-items: center;
   gap: 5px;
+}
+
+.logicBackButton,
+.logicAddButton,
+.logicGraphTools button {
+  white-space: nowrap;
 }
 
 .logicGraphTools button {
@@ -6001,14 +6060,26 @@
   }
 
   .logicGraphToolbar {
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: stretch;
+    flex-direction: column;
     gap: 8px;
     padding: 9px 10px;
   }
 
+  .logicGraphIdentity {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .logicGraphActions {
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
   .logicPageSwitcher {
-    grid-column: 1 / -1;
-    grid-row: 2;
+    width: 100%;
   }
 
   .logicPageSwitcher > span {

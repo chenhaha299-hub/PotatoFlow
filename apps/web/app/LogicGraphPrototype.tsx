@@ -906,32 +906,36 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
       }`}
     >
       <div className={styles.logicGraphToolbar}>
-        <button className={styles.logicBackButton} onClick={backToNotebook}>← 目录</button>
-        <div>
-          <small>第 {activePage.level} 层网图</small>
-          <strong>{activePage.title}</strong>
+        <div className={styles.logicGraphIdentity}>
+          <button className={styles.logicBackButton} onClick={backToNotebook}>← 目录</button>
+          <div className={styles.logicGraphTitle}>
+            <small>第 {activePage.level} 层网图</small>
+            <strong>{activePage.title}</strong>
+          </div>
         </div>
-        <label className={styles.logicPageSwitcher}>
-          <span>切换网图</span>
-          <select
-            aria-label="切换网图"
-            value={activePage.id}
-            onChange={(event) => openPage(event.target.value)}
-          >
-            {orderedPages.map(({ page, depth }) => (
-              <option key={page.id} value={page.id}>
-                {`${"　".repeat(depth)}${depth ? "↳ " : ""}${page.title} · ${page.level}级`}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className={styles.logicGraphTools}>
-          <button aria-label="缩小网图" onClick={() => setViewport((current) => ({ ...current, scale: Math.max(0.42, current.scale - 0.12) }))}>−</button>
-          <span>{Math.round(viewport.scale * 100)}%</span>
-          <button aria-label="放大网图" onClick={() => setViewport((current) => ({ ...current, scale: Math.min(1.8, current.scale + 0.12) }))}>＋</button>
-          <button onClick={() => setViewport({ x: 40, y: 25, scale: 0.82 })}>复位</button>
+        <div className={styles.logicGraphActions}>
+          <label className={styles.logicPageSwitcher}>
+            <span>切换网图</span>
+            <select
+              aria-label="切换网图"
+              value={activePage.id}
+              onChange={(event) => openPage(event.target.value)}
+            >
+              {orderedPages.map(({ page, depth }) => (
+                <option key={page.id} value={page.id}>
+                  {`${"　".repeat(depth)}${depth ? "↳ " : ""}${page.title} · ${page.level}级`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className={styles.logicGraphTools}>
+            <button aria-label="缩小网图" onClick={() => setViewport((current) => ({ ...current, scale: Math.max(0.42, current.scale - 0.12) }))}>−</button>
+            <span>{Math.round(viewport.scale * 100)}%</span>
+            <button aria-label="放大网图" onClick={() => setViewport((current) => ({ ...current, scale: Math.min(1.8, current.scale + 0.12) }))}>＋</button>
+            <button onClick={() => setViewport({ x: 40, y: 25, scale: 0.82 })}>复位</button>
+          </div>
+          <button className={styles.logicAddButton} onClick={openComposer}>＋ 想法</button>
         </div>
-        <button className={styles.logicAddButton} onClick={openComposer}>＋ 想法</button>
       </div>
 
       <nav className={styles.logicBreadcrumb} aria-label="网图层级路径">
@@ -1070,11 +1074,15 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
                   <button aria-label="关闭想法详情" onClick={() => setSelectedNodeId(null)}>×</button>
                 </div>
                 <label>
-                  <span>圆点关键词（最多6个字）</span>
+                  <span>圆点关键词（手动输入最多12字符）</span>
                   <input
                     value={selectedNode.label}
-                    maxLength={6}
-                    onChange={(event) => updateSelectedNode({ label: Array.from(event.target.value).slice(0, 6).join("") })}
+                    onChange={(event) => updateSelectedNode({
+                      label: event.nativeEvent.isComposing
+                        ? event.target.value
+                        : Array.from(event.target.value).slice(0, 12).join(""),
+                    })}
+                    onCompositionEnd={(event) => updateSelectedNode({ label: Array.from(event.currentTarget.value).slice(0, 12).join("") })}
                   />
                 </label>
                 <label>
@@ -1170,8 +1178,16 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
               }} placeholder="可以输入一句完整的话，画布上只显示精简关键词。" autoFocus />
             </label>
             <label>
-              <span>圆点关键词（最多6个字）</span>
-              <input value={ideaLabel} onChange={(event) => { setLabelEdited(true); setIdeaLabel(Array.from(event.target.value).slice(0, 6).join("")); }} maxLength={6} placeholder="系统会自动截取，可修改" />
+              <span>圆点关键词（自动提取6字，手动输入最多12字符）</span>
+              <input
+                value={ideaLabel}
+                onChange={(event) => {
+                  setLabelEdited(true);
+                  setIdeaLabel(event.nativeEvent.isComposing ? event.target.value : Array.from(event.target.value).slice(0, 12).join(""));
+                }}
+                onCompositionEnd={(event) => setIdeaLabel(Array.from(event.currentTarget.value).slice(0, 12).join(""))}
+                placeholder="系统会自动截取，可修改"
+              />
             </label>
             <small>完整原文会保留在圆点详情中。</small>
             <div className={styles.logicDialogActions}>

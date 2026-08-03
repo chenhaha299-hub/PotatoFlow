@@ -101,7 +101,10 @@ test("source keeps the app empty and local-first", async () => {
   assert.match(app, /projects:\s*\[\]/);
   assert.match(app, /tasks:\s*\[\]/);
   assert.match(app, /issues:\s*\[\]/);
-  assert.match(app, /个人上传数据仅本人可见/);
+  assert.match(app, /上传数据仅本人可见/);
+  assert.doesNotMatch(app, /个人上传数据仅本人可见/);
+  assert.match(app, /selectedSyncCopy/);
+  assert.match(app, /使用所选的本机数据并同步/);
   assert.match(app, /localStorage/);
   assert.match(layout, /PotatoFlow/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
@@ -160,8 +163,21 @@ test("source keeps the app empty and local-first", async () => {
   assert.match(css, /\.projectTaskSwipeDelete/);
   assert.match(css, /\.newMilestoneForm/);
   assert.doesNotMatch(css, /\.calendarGrid\s*\{\s*min-width:\s*700px/);
-  assert.match(app, /上传本机数据并开启同步/);
-  assert.match(app, /使用云端数据/);
+  assert.match(app, /使用所选的本机数据并同步/);
+  assert.match(app, /使用所选的云端数据/);
   assert.match(app, /syncReadyRef/);
   assert.match(css, /\.syncBar/);
+});
+
+test("logic graph keeps automatic labels short and manual labels IME-safe", async () => {
+  const graph = await readFile(
+    new URL("../app/LogicGraphPrototype.tsx", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(graph, /slice\(0, 6\)/);
+  assert.match(graph, /slice\(0, 12\)/);
+  assert.match(graph, /nativeEvent\.isComposing/);
+  assert.match(graph, /logicGraphIdentity/);
+  assert.match(graph, /手动输入最多12字符/);
 });
