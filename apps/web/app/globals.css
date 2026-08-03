@@ -19,16 +19,28 @@
 
 html {
   background: var(--paper);
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 body {
   margin: 0;
+  max-width: 100%;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 86% 8%, rgba(223, 243, 92, 0.2), transparent 24rem),
     var(--paper);
   color: var(--ink);
   font-family:
     Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+}
+
+@media (max-width: 620px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 button,

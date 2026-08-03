@@ -152,8 +152,8 @@ The app first shows a change preview. It will:
 - match by stable task ID, with exact title fallback for older data;
 - reject duplicate IDs, duplicate task titles, ambiguous matches, and duplicate step or criterion text;
 - keep existing tasks omitted from `tasks`;
-- preserve completion evidence for unchanged step and criterion text, even if reordered;
-- make changed wording a new unchecked item and retain the prior definition in task revision history;
+- preserve task-level completion and the unified result report by stable task ID;
+- allow step and criterion wording to change while retaining the prior definition in task revision history;
 - refuse exact-repeat imports as “没有变化”;
 - warn when the payload was generated from an older project revision;
 - save an import-before snapshot before writing changes.
@@ -163,9 +163,17 @@ Do not use `deleted_task_ids` for a new project. Do not place the same task ID i
 
 ## Completion and pause
 
-- Do not output `manual_status`.
-- Completion is calculated from `step_results` and `criterion_results` after execution.
-- New import plans normally omit execution result arrays.
+- Do not output `manual_status`, `status`, or a completed flag in a new plan.
+- `steps` are checkable progress items. Their completion percentage calculates task progress.
+- The task title checkbox marks every step complete or incomplete. A task with no steps still uses
+  the title checkbox directly.
+- Every step may have an independent note in `step_reports`. The note is optional and does not
+  determine completion.
+- `acceptance_criteria` remain read-only verification guidance.
+- `result_report` is the single task-level final summary. It complements, rather than replaces,
+  focused step notes.
+- New import plans must not prefill `status`, `step_results`, `step_reports`,
+  `criterion_results`, or `result_report`; the app creates blank execution state.
 - `paused` is independent from progress and defaults to `false`.
 - A recurring task is one task rule. The app stores each date's results in `occurrence_results`.
 
@@ -175,13 +183,14 @@ Do not use `deleted_task_ids` for a new project. Do not place the same task ID i
 - `answered`: analysis recorded, awaiting verification
 - `resolved`: user verified or dismissed the issue
 
-Execution reports belong to task step reports, not the issue list.
+Execution reports belong to the task-level `result_report`, not the issue list.
 
 ## Update behavior
 
 - Preserve project and task IDs.
 - Use “合并更新已有项目” for an existing project.
-- Matching tasks retain compatible completion records.
+- Matching tasks retain task and step completion, per-step notes, the unified result report, and
+  execution history.
 - Tasks absent from an update payload are retained by the app.
 - Deletion occurs only for IDs in `deleted_task_ids`.
 - Re-importing the same payload is idempotent and must not create another project or task.

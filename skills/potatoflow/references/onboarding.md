@@ -59,6 +59,11 @@ leave it blank or label it as a proposed assumption.
 
 ### Round 4 — Confirm task notes
 
+Before confirming notes, organize the plan as milestones containing checkable tasks. A milestone is
+a non-checkable stage heading. A task is the only completion unit. Put the implementation process
+inside `steps` as implementation guidance; do not turn every operation into another task. The app
+lets the user check those steps and attach optional notes during execution.
+
 After the first task list is drafted, go through every proposed task and ask whether it needs a
 note. A note is optional task-specific context such as a reminder, caution, handoff detail, or
 condition that should remain visible during execution. Present all tasks in one concise list so
@@ -92,13 +97,17 @@ Before generating JSON, show a compact confirmation brief:
 待确认假设：
 
 建议阶段：
-1.
-2.
-3.
+1. 阶段标题
+   - 可完成子任务
+   - 可完成子任务
+2. 阶段标题
+   - 可完成子任务
 
 首批准备生成的任务：
-1. [日期/周期] [预计时长] [任务结果]｜备注：无 / 用户提供内容
-2. [日期/周期] [预计时长] [任务结果]｜备注：无 / 用户提供内容
+1. [阶段] [日期/周期] [预计时长] [任务结果]｜备注：无 / 用户提供内容
+   执行步骤：可逐项勾选，可按需添加步骤备注
+2. [阶段] [日期/周期] [预计时长] [任务结果]｜备注：无 / 用户提供内容
+   执行步骤：可逐项勾选，可按需添加步骤备注
 ```
 
 Ask the user to correct the brief, or reply “确认生成”. Do not expose schema details at this stage.

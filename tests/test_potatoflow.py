@@ -89,6 +89,7 @@ class PotatoFlowTests(unittest.TestCase):
         )
         self.assertEqual(len(today["tasks"]), 1)
         self.assertEqual(today["tasks"][0]["id"], "task-define-catalog")
+        self.assertEqual(today["tasks"][0]["result_report"], "")
 
     def test_issue_and_context(self):
         self.import_example()

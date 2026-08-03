@@ -66,7 +66,7 @@ that change.
 
 Request a current-task export, not a full backup. Distinguish:
 
-- result report: evidence of work, saved under the relevant step;
+- result report: evidence of work, saved once at task level;
 - question: uncertainty needing analysis, saved as an issue;
 - blocker: a question that currently prevents progress.
 

@@ -14,6 +14,7 @@ type ProjectInput = {
   execution_improvements?: string;
   execution_tip_title?: string;
   execution_tips?: string[];
+  milestones?: string[];
   source_file_mode?: SourceFileMode;
   source_file_requirements?: SourceFileRequirement[];
   revision?: number;
@@ -56,6 +57,7 @@ type TaskInput = {
   category?: TaskCategory;
   source_file_refs?: string[];
   note?: string;
+  result_report?: string;
   recurrence?: "daily" | "weekdays" | "weekends" | null;
   revision?: number;
   updated_at?: string;
@@ -73,6 +75,7 @@ type TaskRevision = {
   step_results: boolean[];
   step_reports: string[];
   criterion_results: boolean[];
+  result_report?: string;
 };
 
 type Project = Required<
@@ -107,6 +110,7 @@ type Task = Required<
     step_results?: boolean[];
     step_reports?: string[];
     criterion_results?: boolean[];
+    result_report?: string;
     paused?: boolean;
     recurrence?: "daily" | "weekdays" | "weekends" | null;
     occurrence_results?: Record<
@@ -115,6 +119,8 @@ type Task = Required<
         step_results: boolean[];
         step_reports: string[];
         criterion_results: boolean[];
+        result_report?: string;
+        completed?: boolean;
         paused?: boolean;
       }
     >;
@@ -139,6 +145,21 @@ type Issue = {
   blocks_task?: boolean;
 };
 
+function legacyReportsToTaskReport(
+  steps: string[] | undefined,
+  reports: string[] | undefined,
+) {
+  return (reports || [])
+    .map((report, index) => {
+      const value = report.trim();
+      if (!value) return "";
+      const step = steps?.[index]?.trim();
+      return step ? `${step}：${value}` : value;
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 type Store = {
   schema_version: 1;
   projects: Project[];
@@ -150,6 +171,23 @@ type Store = {
     project_id?: string;
     project_revision?: number;
   };
+};
+
+type SyncStatus =
+  | "local"
+  | "checking"
+  | "ready"
+  | "saving"
+  | "offline"
+  | "choice"
+  | "error";
+
+type SyncChoice = {
+  kind: "first-upload" | "different" | "conflict";
+  cloudStore: Store | null;
+  cloudRevision: number;
+  cloudUpdatedAt: string | null;
+  localUpdatedAt: string | null;
 };
 
 type PlanPayload = {
@@ -205,6 +243,7 @@ type ProjectEditDraft = {
 type PlanUndoSnapshot = {
   projectEditDraft: ProjectEditDraft | null;
   projectTaskDrafts: Task[];
+  projectMilestoneDrafts: string[];
   improvementDraft: string;
   executionTipTitleDraft: string;
   executionTipsDraft: string;
@@ -217,7 +256,7 @@ const DEFAULT_EXECUTION_TIPS = [
   "完成标准没有达到，就不急着标记完成。",
 ];
 const ONBOARDING_PROMPT =
-  "使用 $potatoflow 帮我创建一个新项目。请先检查当前会话是否已经安装并能识别 PotatoFlow Skill：如果无法识别，请停止建档，明确告诉我需要先安装 PotatoFlow Skill，并说明安装后重新打开 Codex 或新建任务再继续，不要降级成普通回答。确认 Skill 可用后，请分轮询问项目目标、成功标准、现有资源、限制条件、可用时间和周期任务。还要主动询问这个项目是否有需要随任务查看的 Word、PDF、Markdown 或文本源文件；如果有，继续确认是全部任务共用同一份或多份文件，还是每个任务分别对应不同文件，并在 JSON 中填写 source_file_mode、source_file_requirements 和每条任务的 source_file_refs。整理任务时，要逐项询问或确认每个任务是否需要备注；需要时把用户提供的提醒、补充背景或注意事项写入该任务的 note，不需要时留空，不要自行编造。先给我一份包含源文件关联方式和每条任务备注的项目建档摘要，等我回复“确认生成”后，再输出可导入 PotatoFlow 的 JSON。";
+  "使用 $potatoflow 帮我创建一个新项目。请先检查当前会话是否已经安装并能识别 PotatoFlow Skill：如果无法识别，请停止建档，明确告诉我需要先安装 PotatoFlow Skill，并说明安装后重新打开 Codex 或新建任务再继续，不要降级成普通回答。确认 Skill 可用后，请分轮询问项目目标、成功标准、现有资源、限制条件、可用时间和周期任务。建档必须采用“项目→阶段→子任务→执行步骤”的结构：milestone 作为不勾选的阶段标题，task 作为主要完成单位，steps 只写完成子任务的实施流程，不要把每个操作拆成独立任务。执行时用户可逐项勾选步骤并添加独立备注，整项任务仍只需在底部统一汇报一次；新建 JSON 不要预填完成状态或执行记录。还要主动询问这个项目是否有需要随任务查看的 Word、PDF、Markdown 或文本源文件；如果有，继续确认是全部任务共用同一份或多份文件，还是每个任务分别对应不同文件，并在 JSON 中填写 source_file_mode、source_file_requirements 和每条任务的 source_file_refs。整理任务时，要逐项询问或确认每个任务是否需要备注；需要时把用户提供的提醒、补充背景或注意事项写入该任务的 note，不需要时留空，不要自行编造。先给我一份包含阶段结构、源文件关联方式和每条任务备注的项目建档摘要，等我回复“确认生成”后，再输出可导入 PotatoFlow 的 JSON。";
 const PERSONAL_PROJECT_ID = "project-personal-tasks";
 const NEW_PROJECT_OPTION = "__new_task_project__";
 
@@ -246,6 +285,7 @@ type TabId = "today" | "calendar" | "projects" | "issues";
 
 const STORAGE_KEY = "potatoflow:v1";
 const STORAGE_BACKUP_KEY = "potatoflow:v1:backup";
+const LOCAL_UPDATED_AT_KEY = "potatoflow:v1:updated-at";
 const IMPORT_SNAPSHOTS_KEY = "potatoflow:v1:import-snapshots";
 const FILE_DB_NAME = "potatoflow-files";
 const FILE_STORE_NAME = "source-files";
@@ -298,23 +338,26 @@ function readStoredData() {
               ...(task.steps || []).map(
                 (_, index) =>
                   legacyManualDone ||
+                  task.status === "done" ||
                   task.step_results?.[index] ||
                   false,
               ),
               ...task.acceptance_criteria.map(
                 (_, index) =>
                   legacyManualDone ||
+                  task.status === "done" ||
                   task.criterion_results?.[index] ||
                   false,
               ),
             ];
             const allChecksComplete =
               checks.length > 0 && checks.every(Boolean);
+            const resultReport =
+              task.result_report ||
+              legacyReportsToTaskReport(task.steps, task.step_reports);
             const hasActivity =
               checks.some(Boolean) ||
-              task.step_reports?.some(
-                (report) => report.trim().length > 0,
-              );
+              resultReport.trim().length > 0;
             return {
               ...taskWithoutManual,
               revision: task.revision || 1,
@@ -325,6 +368,7 @@ function readStoredData() {
               step_results: (task.steps || []).map(
                 (_, index) =>
                   legacyManualDone ||
+                  task.status === "done" ||
                   task.step_results?.[index] ||
                   false,
               ),
@@ -334,12 +378,41 @@ function readStoredData() {
                   task.criterion_results?.[index] ||
                   false,
               ),
+              result_report: resultReport,
+              occurrence_results: Object.fromEntries(
+                Object.entries(task.occurrence_results || {}).map(
+                  ([date, occurrence]) => {
+                    const occurrenceChecks = [
+                      ...(occurrence.step_results || []),
+                      ...(occurrence.criterion_results || []),
+                    ];
+                    return [
+                      date,
+                      {
+                        ...occurrence,
+                        completed:
+                          occurrence.completed === true ||
+                          (occurrenceChecks.length > 0 &&
+                            occurrenceChecks.every(Boolean)),
+                        result_report:
+                          occurrence.result_report ||
+                          legacyReportsToTaskReport(
+                            task.steps,
+                            occurrence.step_reports,
+                          ),
+                      },
+                    ];
+                  },
+                ),
+              ),
               status:
                 task.status === "cancelled"
                   ? "cancelled"
                   : explicitlyBlocked.has(task.id)
                     ? "blocked"
-                    : allChecksComplete
+                    : task.status === "done" ||
+                        legacyManualDone ||
+                        allChecksComplete
                       ? "done"
                       : hasActivity
                         ? "doing"
@@ -363,6 +436,218 @@ function writeStoredData(value: Store) {
   if (previous === serialized) return;
   if (previous) localStorage.setItem(STORAGE_BACKUP_KEY, previous);
   localStorage.setItem(STORAGE_KEY, serialized);
+  localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+}
+
+function storeLatestTimestamp(value: Store) {
+  const candidates = [
+    ...value.projects.flatMap((project) => [
+      project.updated_at,
+      project.created_at,
+      ...(project.source_files || []).map((file) => file.uploaded_at),
+    ]),
+    ...value.tasks.flatMap((task) => [task.updated_at, task.created_at]),
+    ...value.issues.map((issue) => issue.created_at),
+  ].filter((timestamp): timestamp is string => Boolean(timestamp));
+  const latest = candidates.reduce((maximum, timestamp) => {
+    const parsed = Date.parse(timestamp);
+    return Number.isFinite(parsed) ? Math.max(maximum, parsed) : maximum;
+  }, 0);
+  return latest ? new Date(latest).toISOString() : null;
+}
+
+function readLocalUpdatedAt(value: Store) {
+  return localStorage.getItem(LOCAL_UPDATED_AT_KEY) || storeLatestTimestamp(value);
+}
+
+function formatSyncTime(value: string | null) {
+  if (!value) return "暂无修改时间";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "修改时间未知";
+  return date.toLocaleString("zh-CN", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function storeForSync(value: Store): Store {
+  return { ...value, export_meta: undefined };
+}
+
+function storeHasContent(value: Store) {
+  return (
+    value.projects.length > 0 ||
+    value.tasks.length > 0 ||
+    value.issues.length > 0
+  );
+}
+
+function serializedStore(value: Store) {
+  return JSON.stringify(storeForSync(value));
+}
+
+const NON_SEMANTIC_SYNC_KEYS = new Set([
+  "export_meta",
+  "revision",
+  "revision_history",
+  "updated_at",
+  "created_at",
+  "uploaded_at",
+  "occurrence_date",
+  "manual_status",
+]);
+
+const UNORDERED_SYNC_ARRAYS = new Set([
+  "projects",
+  "tasks",
+  "issues",
+  "source_files",
+  "source_file_ids",
+]);
+
+const POSITIONAL_BOOLEAN_ARRAYS = new Set([
+  "step_results",
+  "criterion_results",
+]);
+
+const POSITIONAL_TEXT_ARRAYS = new Set(["step_reports"]);
+
+function semanticStore(value: Store) {
+  return {
+    ...storeForSync(value),
+    projects: value.projects.map((project) =>
+      Object.fromEntries(
+        Object.entries(project).filter(([key]) => key !== "status"),
+      ),
+    ),
+    tasks: value.tasks.map((task) => {
+      const legacyManualDone = task.manual_status === "done";
+      const normalizedTask = {
+        ...task,
+        paused: task.paused === true || task.manual_status === "pending",
+        step_results: (task.steps || []).map(
+          (_, index) =>
+            legacyManualDone ||
+            task.status === "done" ||
+            task.step_results?.[index] ||
+            false,
+        ),
+        criterion_results: task.acceptance_criteria.map(
+          (_, index) =>
+            legacyManualDone ||
+            task.status === "done" ||
+            task.criterion_results?.[index] ||
+            false,
+        ),
+        result_report:
+          task.result_report ||
+          legacyReportsToTaskReport(task.steps, task.step_reports),
+        occurrence_results: Object.fromEntries(
+          Object.entries(task.occurrence_results || {}).map(
+            ([date, occurrence]) => {
+              const occurrenceChecks = [
+                ...(occurrence.step_results || []),
+                ...(occurrence.criterion_results || []),
+              ];
+              return [
+                date,
+                {
+                  ...occurrence,
+                  completed:
+                    occurrence.completed === true ||
+                    (occurrenceChecks.length > 0 &&
+                      occurrenceChecks.every(Boolean)),
+                  result_report:
+                    occurrence.result_report ||
+                    legacyReportsToTaskReport(
+                      task.steps,
+                      occurrence.step_reports,
+                    ),
+                },
+              ];
+            },
+          ),
+        ),
+      };
+      return Object.fromEntries(
+        Object.entries(normalizedTask).filter(
+          ([key]) => key !== "status" && key !== "manual_status",
+        ),
+      );
+    }),
+  };
+}
+
+function isEmptySemanticValue(value: unknown, key: string) {
+  if (value === undefined || value === null || value === "" || value === false) {
+    return true;
+  }
+  if (key === "source_file_mode" && value === "none") return true;
+  if (key === "category" && value === "work") return true;
+  if (key === "priority" && value === 3) return true;
+  if (
+    key === "execution_tip_title" &&
+    value === DEFAULT_EXECUTION_TIP_TITLE
+  ) {
+    return true;
+  }
+  if (
+    key === "execution_tips" &&
+    Array.isArray(value) &&
+    JSON.stringify(value) === JSON.stringify(DEFAULT_EXECUTION_TIPS)
+  ) {
+    return true;
+  }
+  if (Array.isArray(value)) return value.length === 0;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.keys(value).length === 0
+  );
+}
+
+function canonicalSyncValue(value: unknown, parentKey = ""): unknown {
+  if (Array.isArray(value)) {
+    const normalized = value.map((item) => canonicalSyncValue(item));
+    if (POSITIONAL_BOOLEAN_ARRAYS.has(parentKey)) {
+      while (normalized.at(-1) === false) normalized.pop();
+    } else if (POSITIONAL_TEXT_ARRAYS.has(parentKey)) {
+      while (normalized.at(-1) === "") normalized.pop();
+    }
+    if (normalized.length === 0) return undefined;
+    if (!UNORDERED_SYNC_ARRAYS.has(parentKey)) return normalized;
+    return normalized.sort((left, right) => {
+      const leftKey =
+        left && typeof left === "object" && "id" in left
+          ? String((left as { id?: unknown }).id || "")
+          : JSON.stringify(left);
+      const rightKey =
+        right && typeof right === "object" && "id" in right
+          ? String((right as { id?: unknown }).id || "")
+          : JSON.stringify(right);
+      return leftKey.localeCompare(rightKey);
+    });
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !NON_SEMANTIC_SYNC_KEYS.has(key))
+      .sort(([left], [right]) => left.localeCompare(right))
+      .flatMap(([key, child]) => {
+        const normalized = canonicalSyncValue(child, key);
+        return isEmptySemanticValue(normalized, key) ? [] : [[key, normalized]];
+      });
+    return entries.length ? Object.fromEntries(entries) : undefined;
+  }
+  return value;
+}
+
+function storesSemanticallyEqual(left: Store, right: Store) {
+  return (
+    JSON.stringify(canonicalSyncValue(semanticStore(left))) ===
+    JSON.stringify(canonicalSyncValue(semanticStore(right)))
+  );
 }
 
 function readImportSnapshots(): ImportSnapshot[] {
@@ -455,6 +740,33 @@ async function loadSourceFile(id: string) {
   return file;
 }
 
+async function uploadCloudSourceFile(id: string, file: File) {
+  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      "X-File-Name": encodeURIComponent(file.name),
+    },
+    body: file,
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || "文件暂时无法上传到云端。");
+  }
+}
+
+async function loadCloudSourceFile(id: string) {
+  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
+    cache: "no-store",
+  });
+  if (!response.ok) return undefined;
+  return response.blob();
+}
+
+async function deleteCloudSourceFile(id: string) {
+  await fetch(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 const NAV_ITEMS: Array<{ id: TabId; label: string; mark: string }> = [
   { id: "today", label: "今天", mark: "今" },
   { id: "calendar", label: "日历", mark: "日" },
@@ -481,36 +793,22 @@ function taskLevel(task: Task) {
 }
 
 function taskCompletion(task: Task) {
-  const occurrence =
-    task.occurrence_date && task.occurrence_results
-      ? task.occurrence_results[task.occurrence_date]
-      : undefined;
+  if (task.status === "done") return 100;
   const steps = task.steps || [];
-  const stepChecks = steps.map(
-    (_, index) =>
-      occurrence?.step_results?.[index] ||
-      task.step_results?.[index] ||
-      false,
+  if (steps.length === 0) return 0;
+  const completedSteps = steps.reduce(
+    (total, _, index) => total + Number(task.step_results?.[index] === true),
+    0,
   );
-  const criteria = task.acceptance_criteria.map(
-    (_, index) =>
-      occurrence?.criterion_results?.[index] ||
-      task.criterion_results?.[index] ||
-      false,
-  );
-  const results = [...stepChecks, ...criteria];
-  if (results.length === 0) return task.status === "done" ? 100 : 0;
-  return Math.round(
-    (results.filter(Boolean).length / results.length) * 100,
-  );
+  return Math.round((completedSteps / steps.length) * 100);
 }
 
 function taskStatusFromProgress(task: Task, isBlocked = false): TaskStatus {
   if (task.status === "cancelled") return "cancelled";
-  if (isBlocked) return "blocked";
   const progress = taskCompletion(task);
-  if (progress >= 100) return "done";
-  if (progress > 0) return "doing";
+  if (progress === 100) return "done";
+  if (isBlocked || task.status === "blocked") return "blocked";
+  if (progress > 0 || (task.result_report || "").trim()) return "doing";
   return task.scheduled_date ? "scheduled" : "backlog";
 }
 
@@ -641,22 +939,41 @@ function taskScheduleType(task: Task): ScheduleType {
 function taskForDate(task: Task, dateValue: string): Task {
   if (!task.recurrence) return task;
   const occurrence = task.occurrence_results?.[dateValue];
+  const legacyChecks = [
+    ...(occurrence?.step_results || []),
+    ...(occurrence?.criterion_results || []),
+  ];
+  const completed =
+    occurrence?.completed === true ||
+    (legacyChecks.length > 0 && legacyChecks.every(Boolean));
+  const resultReport =
+    occurrence?.result_report ||
+    legacyReportsToTaskReport(task.steps, occurrence?.step_reports);
   const occurrenceTask: Task = {
     ...task,
     occurrence_date: dateValue,
     step_results:
-      occurrence?.step_results || (task.steps || []).map(() => false),
+      completed
+        ? (task.steps || []).map(() => true)
+        : occurrence?.step_results || (task.steps || []).map(() => false),
     step_reports:
       occurrence?.step_reports || (task.steps || []).map(() => ""),
     criterion_results:
       occurrence?.criterion_results ||
       task.acceptance_criteria.map(() => false),
+    result_report: resultReport,
     paused: occurrence?.paused || false,
+    status: completed
+      ? "done"
+      : task.status === "blocked"
+        ? "blocked"
+      : resultReport.trim()
+        ? "doing"
+        : task.scheduled_date
+          ? "scheduled"
+          : "backlog",
   };
-  return {
-    ...occurrenceTask,
-    status: taskStatusFromProgress(occurrenceTask),
-  };
+  return occurrenceTask;
 }
 
 function taskOverallCompletion(task: Task) {
@@ -831,7 +1148,7 @@ function parsePlan(raw: string): PlanPayload {
     const steps = task.steps || [];
     if (new Set(steps).size !== steps.length) {
       throw new Error(
-        `第 ${index + 1} 个任务包含重复执行步骤，无法安全对应原有完成记录。`,
+        `第 ${index + 1} 个任务包含重复执行步骤，会造成流程显示和历史对比歧义。`,
       );
     }
     if (
@@ -839,7 +1156,7 @@ function parsePlan(raw: string): PlanPayload {
       task.acceptance_criteria.length
     ) {
       throw new Error(
-        `第 ${index + 1} 个任务包含重复完成标准，无法安全对应原有验收记录。`,
+        `第 ${index + 1} 个任务包含重复完成标准，会造成流程显示和历史对比歧义。`,
       );
     }
     if (task.source_file_refs && !Array.isArray(task.source_file_refs)) {
@@ -892,7 +1209,11 @@ function parseBackup(raw: string): Store {
   return value;
 }
 
-export default function PotatoFlowApp() {
+export default function PotatoFlowApp({
+  syncEnabled,
+}: {
+  syncEnabled: boolean;
+}) {
   const [store, setStore] = useState<Store>(EMPTY_STORE);
   const [hydrated, setHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("today");
@@ -957,11 +1278,15 @@ export default function PotatoFlowApp() {
     null,
   );
   const [executionDraft, setExecutionDraft] = useState<Task | null>(null);
+  const [openStepNoteIndex, setOpenStepNoteIndex] = useState<number | null>(
+    null,
+  );
   const [issueText, setIssueText] = useState("");
   const [issueBlocksTask, setIssueBlocksTask] = useState(false);
   const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
   const [issueQuestionDraft, setIssueQuestionDraft] = useState("");
   const [issueResponseDraft, setIssueResponseDraft] = useState("");
+  const [issuePromptCopied, setIssuePromptCopied] = useState(false);
   const [issueExitConfirmOpen, setIssueExitConfirmOpen] = useState(false);
   const [issueExitAction, setIssueExitAction] = useState<"close" | "task">(
     "close",
@@ -991,8 +1316,15 @@ export default function PotatoFlowApp() {
     string | null
   >(null);
   const [projectTaskBaseline, setProjectTaskBaseline] = useState("[]");
+  const [projectMilestoneDrafts, setProjectMilestoneDrafts] = useState<string[]>([]);
+  const [projectMilestoneBaseline, setProjectMilestoneBaseline] = useState("[]");
+  const [newMilestoneName, setNewMilestoneName] = useState("");
+  const [addingMilestone, setAddingMilestone] = useState(false);
+  const [swipedProjectTaskId, setSwipedProjectTaskId] = useState<string | null>(null);
+  const projectTaskSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [planUndoStack, setPlanUndoStack] = useState<PlanUndoSnapshot[]>([]);
   const planOperationKeyRef = useRef<string | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [collapsedTaskGroups, setCollapsedTaskGroups] = useState<
     Partial<Record<TaskCategory, boolean>>
   >({});
@@ -1008,6 +1340,16 @@ export default function PotatoFlowApp() {
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState("");
   const [sourceUploadTarget, setSourceUploadTarget] = useState("__all__");
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>(
+    syncEnabled ? "checking" : "local",
+  );
+  const [syncError, setSyncError] = useState("");
+  const [syncChoice, setSyncChoice] = useState<SyncChoice | null>(null);
+  const [cloudRevision, setCloudRevision] = useState(0);
+  const [syncRetry, setSyncRetry] = useState(0);
+  const syncReadyRef = useRef(false);
+  const lastCloudPayloadRef = useRef("");
+  const syncRequestRef = useRef(false);
 
   useEffect(() => {
     const stored = readStoredData();
@@ -1022,6 +1364,240 @@ export default function PotatoFlowApp() {
       writeStoredData(store);
     }
   }, [store, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || !syncEnabled) return;
+    let cancelled = false;
+    syncReadyRef.current = false;
+
+    async function loadCloudData() {
+      setSyncStatus("checking");
+      setSyncError("");
+      try {
+        const response = await fetch("/api/sync", { cache: "no-store" });
+        if (!response.ok) throw new Error("暂时无法读取云端数据。");
+        const data = (await response.json()) as {
+          snapshot: Store | null;
+          revision: number;
+          updated_at: string | null;
+        };
+        if (cancelled) return;
+
+        const localStore = readStoredData() || EMPTY_STORE;
+        const localPayload = serializedStore(localStore);
+        setCloudRevision(data.revision);
+
+        if (!data.snapshot) {
+          if (storeHasContent(localStore)) {
+            setSyncChoice({
+              kind: "first-upload",
+              cloudStore: null,
+              cloudRevision: 0,
+              cloudUpdatedAt: null,
+              localUpdatedAt: readLocalUpdatedAt(localStore),
+            });
+            setSyncStatus("choice");
+          } else {
+            lastCloudPayloadRef.current = "";
+            syncReadyRef.current = true;
+            setSyncStatus("ready");
+          }
+          return;
+        }
+
+        const cloudPayload = serializedStore(data.snapshot);
+        if (!storeHasContent(localStore)) {
+          setStore(data.snapshot);
+          writeStoredData(data.snapshot);
+          lastCloudPayloadRef.current = cloudPayload;
+          syncReadyRef.current = true;
+          setSyncStatus("ready");
+        } else if (storesSemanticallyEqual(localStore, data.snapshot)) {
+          lastCloudPayloadRef.current = localPayload;
+          syncReadyRef.current = true;
+          setSyncStatus("ready");
+        } else {
+          setSyncChoice({
+            kind: "different",
+            cloudStore: data.snapshot,
+            cloudRevision: data.revision,
+            cloudUpdatedAt: data.updated_at,
+            localUpdatedAt: readLocalUpdatedAt(localStore),
+          });
+          setSyncStatus("choice");
+        }
+      } catch (error) {
+        if (cancelled) return;
+        setSyncError(
+          error instanceof Error ? error.message : "暂时无法连接云端。",
+        );
+        setSyncStatus("offline");
+      }
+    }
+
+    void loadCloudData();
+    return () => {
+      cancelled = true;
+    };
+  }, [hydrated, syncEnabled, syncRetry]);
+
+  useEffect(() => {
+    function retryWhenOnline() {
+      if (syncEnabled && syncStatus === "offline") {
+        setSyncRetry((value) => value + 1);
+      }
+    }
+    window.addEventListener("online", retryWhenOnline);
+    return () => window.removeEventListener("online", retryWhenOnline);
+  }, [syncStatus, syncEnabled]);
+
+  useEffect(() => {
+    if (
+      !hydrated ||
+      !syncEnabled ||
+      !syncReadyRef.current ||
+      syncChoice ||
+      syncRequestRef.current
+    ) {
+      return;
+    }
+    const payload = serializedStore(store);
+    if (payload === lastCloudPayloadRef.current) return;
+
+    const timer = window.setTimeout(async () => {
+      syncRequestRef.current = true;
+      setSyncStatus("saving");
+      try {
+        const response = await fetch("/api/sync", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            snapshot: storeForSync(store),
+            base_revision: cloudRevision,
+          }),
+        });
+        const data = (await response.json()) as {
+          error?: string;
+          snapshot?: Store | null;
+          revision?: number;
+          updated_at?: string | null;
+        };
+        if (response.status === 409) {
+          if (data.snapshot && storesSemanticallyEqual(store, data.snapshot)) {
+            lastCloudPayloadRef.current = payload;
+            setCloudRevision(data.revision || cloudRevision);
+            syncReadyRef.current = true;
+            setSyncChoice(null);
+            setSyncError("");
+            setSyncStatus("ready");
+            return;
+          }
+          syncReadyRef.current = false;
+          setSyncChoice({
+            kind: "conflict",
+            cloudStore: data.snapshot || null,
+            cloudRevision: data.revision || 0,
+            cloudUpdatedAt: data.updated_at || null,
+            localUpdatedAt: readLocalUpdatedAt(store),
+          });
+          setSyncStatus("choice");
+          return;
+        }
+        if (!response.ok || typeof data.revision !== "number") {
+          throw new Error(data.error || "同步没有完成。你的数据仍保存在本机。");
+        }
+        lastCloudPayloadRef.current = payload;
+        setCloudRevision(data.revision);
+        setSyncError("");
+        setSyncStatus("ready");
+      } catch (error) {
+        setSyncError(
+          error instanceof Error
+            ? error.message
+            : "同步没有完成。你的数据仍保存在本机。",
+        );
+        setSyncStatus("offline");
+      } finally {
+        syncRequestRef.current = false;
+      }
+    }, 900);
+
+    return () => window.clearTimeout(timer);
+  }, [store, hydrated, syncEnabled, cloudRevision, syncChoice]);
+
+  function useCloudCopy() {
+    if (!syncChoice?.cloudStore) return;
+    if (storeHasContent(store)) {
+      saveImportSnapshot(store, "切换云端数据前的本机备份");
+    }
+    const next = syncChoice.cloudStore;
+    setStore(next);
+    writeStoredData(next);
+    lastCloudPayloadRef.current = serializedStore(next);
+    setCloudRevision(syncChoice.cloudRevision);
+    syncReadyRef.current = true;
+    setSyncChoice(null);
+    setSyncError("");
+    setSyncStatus("ready");
+  }
+
+  async function uploadLocalCopy() {
+    if (!syncChoice || syncRequestRef.current) return;
+    syncRequestRef.current = true;
+    setSyncStatus("saving");
+    setSyncError("");
+    const payload = serializedStore(store);
+    try {
+      const response = await fetch("/api/sync", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          snapshot: storeForSync(store),
+          base_revision: syncChoice.cloudRevision,
+        }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        snapshot?: Store | null;
+        revision?: number;
+        updated_at?: string | null;
+      };
+      if (response.status === 409) {
+        if (data.snapshot && storesSemanticallyEqual(store, data.snapshot)) {
+          lastCloudPayloadRef.current = payload;
+          setCloudRevision(data.revision || syncChoice.cloudRevision);
+          syncReadyRef.current = true;
+          setSyncChoice(null);
+          setSyncStatus("ready");
+          return;
+        }
+        setSyncChoice({
+          kind: "conflict",
+          cloudStore: data.snapshot || null,
+          cloudRevision: data.revision || 0,
+          cloudUpdatedAt: data.updated_at || null,
+          localUpdatedAt: readLocalUpdatedAt(store),
+        });
+        setSyncStatus("choice");
+        return;
+      }
+      if (!response.ok || typeof data.revision !== "number") {
+        throw new Error(data.error || "本机数据暂时无法上传。");
+      }
+      lastCloudPayloadRef.current = payload;
+      setCloudRevision(data.revision);
+      syncReadyRef.current = true;
+      setSyncChoice(null);
+      setSyncStatus("ready");
+    } catch (error) {
+      setSyncError(
+        error instanceof Error ? error.message : "本机数据暂时无法上传。",
+      );
+      setSyncStatus("offline");
+    } finally {
+      syncRequestRef.current = false;
+    }
+  }
 
   function updateStore(updater: (current: Store) => Store) {
     setStore((current) => {
@@ -1048,6 +1624,27 @@ export default function PotatoFlowApp() {
   const selectedProject = selectedTask
     ? store.projects.find((project) => project.id === selectedTask.project_id)
     : undefined;
+  const selectedTaskMilestones = selectedProject
+    ? store.tasks
+        .filter((task) => task.project_id === selectedProject.id)
+        .reduce<string[]>((milestones, task) => {
+          const milestone = task.milestone?.trim() || "未分组任务";
+          if (!milestones.includes(milestone)) milestones.push(milestone);
+          return milestones;
+        }, [])
+    : [];
+  const selectedTaskMilestone =
+    selectedTask?.milestone?.trim() || "未分组任务";
+  const selectedTaskMilestoneIndex = Math.max(
+    0,
+    selectedTaskMilestones.indexOf(selectedTaskMilestone),
+  );
+  const selectedTaskThemeClass = [
+    styles.taskThemeBlue,
+    styles.taskThemeOrange,
+    styles.taskThemePurple,
+    styles.taskThemeGreen,
+  ][selectedTaskMilestoneIndex % 4];
   const selectedTaskSourceFiles = selectedProject
     ? (selectedProject.source_files || []).filter((file) =>
         (selectedTask?.source_file_ids || []).includes(file.id),
@@ -1063,6 +1660,7 @@ export default function PotatoFlowApp() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setOrganizationDraft(null);
       setExecutionDraft(null);
+      setOpenStepNoteIndex(null);
       return;
     }
     const storedTask = store.tasks.find((item) => item.id === selectedTaskId);
@@ -1076,12 +1674,14 @@ export default function PotatoFlowApp() {
         step_results: [...(task.step_results || [])],
         step_reports: [...(task.step_reports || [])],
         criterion_results: [...(task.criterion_results || [])],
+        result_report: task.result_report || "",
       });
       setOrganizationDraft({
         taskId: task.id,
         category: taskCategory(task),
         priority: task.priority || 3,
       });
+      setOpenStepNoteIndex(null);
     }
     // Drafts intentionally refresh only when the selected task occurrence changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1114,6 +1714,17 @@ export default function PotatoFlowApp() {
         }));
       setProjectTaskDrafts(taskDrafts);
       setProjectTaskBaseline(JSON.stringify(taskDrafts));
+      const milestoneDrafts = Array.from(
+        new Set([
+          ...(planProject.milestones || []),
+          ...taskDrafts.map((task) => task.milestone?.trim()).filter(Boolean),
+        ] as string[]),
+      );
+      setProjectMilestoneDrafts(milestoneDrafts);
+      setProjectMilestoneBaseline(JSON.stringify(milestoneDrafts));
+      setNewMilestoneName("");
+      setAddingMilestone(false);
+      setSwipedProjectTaskId(null);
       setProjectTaskDraftProjectId(planProject.id);
       setImprovementDraft(planProject.execution_improvements || "");
       setExecutionTipTitleDraft(
@@ -1152,6 +1763,8 @@ export default function PotatoFlowApp() {
       JSON.stringify(
         (JSON.parse(projectTaskBaseline) as Task[]).map(taskDefinition),
       );
+  const projectMilestonesChanged =
+    JSON.stringify(projectMilestoneDrafts) !== projectMilestoneBaseline;
   const planHasUnsavedChanges =
     Boolean(
       planProject &&
@@ -1159,6 +1772,7 @@ export default function PotatoFlowApp() {
     ) &&
     (projectContentChanged ||
       projectTasksChanged ||
+      projectMilestonesChanged ||
       executionTipTitleDraft.trim() !==
         (planProject?.execution_tip_title || DEFAULT_EXECUTION_TIP_TITLE) ||
       executionTipsDraft.trim() !==
@@ -1176,6 +1790,35 @@ export default function PotatoFlowApp() {
     )
       ? taskCategory(projectTaskDrafts[0])
       : null;
+  const visibleMilestones = (() => {
+    const ungroupedMilestone = "未分组任务";
+    const orderedMilestones = Array.from(
+      new Set([
+        ...projectMilestoneDrafts,
+        ...projectTaskDrafts.map(
+          (task) => task.milestone?.trim() || ungroupedMilestone,
+        ),
+      ]),
+    );
+
+    // Milestones are a timeline: keep their saved/creation order and always
+    // place the fallback group at the end. Adding a milestone must never
+    // renumber an existing stage by inserting before it.
+    return [
+      ...orderedMilestones.filter(
+        (milestone) => milestone !== ungroupedMilestone,
+      ),
+      ...orderedMilestones.filter(
+        (milestone) => milestone === ungroupedMilestone,
+      ),
+    ];
+  })();
+  const projectTaskGroups = visibleMilestones.map((milestone) => ({
+    milestone,
+    tasks: projectTaskDrafts.filter(
+      (task) => (task.milestone?.trim() || "未分组任务") === milestone,
+    ),
+  }));
 
   const todayTasks = useMemo(
     () =>
@@ -1255,6 +1898,11 @@ export default function PotatoFlowApp() {
   const selectedIssueProject = selectedIssue
     ? store.projects.find((project) => project.id === selectedIssue.project_id)
     : undefined;
+  const selectedIssueSourceFiles = selectedIssueProject
+    ? (selectedIssueProject.source_files || []).filter((file) =>
+        (selectedIssueTask?.source_file_ids || []).includes(file.id),
+      )
+    : [];
   const issueHasUnsavedChanges =
     Boolean(selectedIssue) &&
     (issueQuestionDraft.trim() !== selectedIssue?.question ||
@@ -1315,12 +1963,13 @@ export default function PotatoFlowApp() {
       organizationDraft.priority !== (storedSelectedTask.priority || 3));
   const executionChanged =
     Boolean(datedSelectedTask && executionDraft) &&
-    (JSON.stringify(executionDraft?.step_results || []) !==
-      JSON.stringify(datedSelectedTask?.step_results || []) ||
+    (executionDraft?.status !== datedSelectedTask?.status ||
+      JSON.stringify(executionDraft?.step_results || []) !==
+        JSON.stringify(datedSelectedTask?.step_results || []) ||
       JSON.stringify(executionDraft?.step_reports || []) !==
         JSON.stringify(datedSelectedTask?.step_reports || []) ||
-      JSON.stringify(executionDraft?.criterion_results || []) !==
-        JSON.stringify(datedSelectedTask?.criterion_results || []) ||
+      (executionDraft?.result_report || "") !==
+        (datedSelectedTask?.result_report || "") ||
       executionDraft?.paused !== datedSelectedTask?.paused ||
       (executionDraft?.note || "") !== (datedSelectedTask?.note || ""));
   const taskHasUnsavedChanges =
@@ -1335,6 +1984,7 @@ export default function PotatoFlowApp() {
     setSelectedTaskDate(null);
     setOrganizationDraft(null);
     setExecutionDraft(null);
+    setOpenStepNoteIndex(null);
     setIssueText("");
     setIssueBlocksTask(false);
   }
@@ -1379,6 +2029,8 @@ export default function PotatoFlowApp() {
               criterion_results: [
                 ...(selectedTask.criterion_results || []),
               ],
+              result_report: selectedTask.result_report || "",
+              completed: selectedTask.status === "done",
               paused: selectedTask.paused || false,
             },
           };
@@ -1391,7 +2043,11 @@ export default function PotatoFlowApp() {
             status:
               issue?.blocks_task === true
                 ? "blocked"
-                : taskStatusFromProgress(selectedTask),
+                : task.status === "done"
+                  ? task.scheduled_date
+                    ? "scheduled"
+                    : "backlog"
+                  : task.status,
           };
         }
         return {
@@ -1399,6 +2055,7 @@ export default function PotatoFlowApp() {
           occurrence_date: undefined,
           category,
           priority,
+          result_report: selectedTask.result_report || "",
           status:
             issue?.blocks_task === true
               ? "blocked"
@@ -1425,6 +2082,111 @@ export default function PotatoFlowApp() {
           : issue,
       ),
     }));
+  }
+
+  async function writeClipboardText(content: string) {
+    try {
+      await navigator.clipboard.writeText(content);
+    } catch {
+      const textarea = document.createElement("textarea");
+      textarea.value = content;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+  }
+
+  async function copyIssuePrompt() {
+    if (!selectedIssue) return;
+    const task = selectedIssueTask;
+    const project = selectedIssueProject;
+    const steps = task?.steps?.length
+      ? task.steps
+          .map(
+            (step, index) =>
+              `- [${task.step_results?.[index] ? "已完成" : "未完成"}] ${step}${
+                task.step_reports?.[index]
+                  ? `\n  步骤备注：${task.step_reports[index]}`
+                  : ""
+              }`,
+          )
+          .join("\n")
+      : "未记录执行步骤";
+    const prompt = `请作为问题解决顾问，结合下面的完整上下文，帮我解决当前任务阻碍。不要只给泛泛建议，也不要重新复述问题。
+
+【项目】${project?.name || "原项目已不存在"}
+【项目目标】${project?.objective || "未记录"}
+【项目背景】${project?.background || "未记录"}
+【限制条件】${project?.constraints?.length ? project.constraints.join("；") : "未记录"}
+
+【当前任务】${task?.title || "原任务已不存在"}
+【任务目标】${task?.objective || "未记录"}
+【为什么做】${task?.why || "未记录"}
+【任务备注】${task?.note || "无"}
+【相关源文件】${selectedIssueSourceFiles.length ? selectedIssueSourceFiles.map((file) => file.name).join("、") : "无"}
+
+【执行步骤与当前进度】
+${steps}
+
+【完成标准】
+${task?.acceptance_criteria?.length ? task.acceptance_criteria.map((criterion) => `- ${criterion}`).join("\n") : "未记录"}
+
+【当前完成情况】
+${task?.result_report || "尚未汇报"}
+
+【当前阻碍】
+${issueQuestionDraft.trim() || selectedIssue.question}
+
+【已经尝试】
+${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${attempt}`).join("\n") : "尚未记录"}
+
+请按以下结构回答：
+1. 最可能的原因（按可能性排序）
+2. 现在最应该先做的一件事
+3. 可直接执行的解决步骤
+4. 每一步如何判断是否有效
+5. 如果方案失败，下一套备选方案
+6. 需要我补充的关键信息（仅列真正影响判断的内容）`;
+    await writeClipboardText(prompt);
+    setIssuePromptCopied(true);
+    window.setTimeout(() => setIssuePromptCopied(false), 2200);
+  }
+
+  function beginSwipe(event: React.TouchEvent<HTMLElement>) {
+    const target = event.target as HTMLElement;
+    if (target.closest("input, textarea, select")) {
+      swipeStartRef.current = null;
+      return;
+    }
+    const touch = event.touches[0];
+    swipeStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  }
+
+  function finishSwipe(
+    event: React.TouchEvent<HTMLElement>,
+    onLeft?: () => void,
+    onRight?: () => void,
+  ) {
+    const start = swipeStartRef.current;
+    const touch = event.changedTouches[0];
+    swipeStartRef.current = null;
+    if (!start || !touch) return;
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 70 || Math.abs(deltaX) < Math.abs(deltaY) * 1.35) {
+      return;
+    }
+    if (deltaX < 0) onLeft?.();
+    else onRight?.();
+  }
+
+  function moveSelectedDate(offset: number) {
+    const date = new Date(`${selectedDate}T12:00:00`);
+    date.setDate(date.getDate() + offset);
+    setSelectedDate(localDate(date));
   }
 
   function finishClosingIssue(action: "close" | "task" = issueExitAction) {
@@ -1456,18 +2218,7 @@ export default function PotatoFlowApp() {
   }
 
   async function copyOnboardingPrompt() {
-    try {
-      await navigator.clipboard.writeText(ONBOARDING_PROMPT);
-    } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = ONBOARDING_PROMPT;
-      textarea.style.position = "fixed";
-      textarea.style.opacity = "0";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      textarea.remove();
-    }
+    await writeClipboardText(ONBOARDING_PROMPT);
     setOnboardingCopied(true);
     window.setTimeout(() => setOnboardingCopied(false), 1800);
   }
@@ -1725,6 +2476,7 @@ export default function PotatoFlowApp() {
         source_file_refs:
           task.source_file_refs ?? existing?.source_file_refs ?? [],
         note: task.note ?? existing?.note ?? "",
+        result_report: existing?.result_report || "",
         source_file_ids: existing?.source_file_ids || [],
         status:
           existing?.status ||
@@ -1780,6 +2532,7 @@ export default function PotatoFlowApp() {
           step_results: [...(existing.step_results || [])],
           step_reports: [...(existing.step_reports || [])],
           criterion_results: [...(existing.criterion_results || [])],
+          result_report: existing.result_report || "",
         };
         draft.revision = (existing.revision || 1) + 1;
         draft.updated_at = now;
@@ -2013,6 +2766,7 @@ export default function PotatoFlowApp() {
             requirement_id: requirementId,
           };
           await storeSourceFile(metadata.id, file);
+          if (syncEnabled) await uploadCloudSourceFile(metadata.id, file);
           storedIds.push(metadata.id);
           return { metadata, taskTitle };
         }),
@@ -2068,6 +2822,9 @@ export default function PotatoFlowApp() {
       setSelectedPlanProjectId(importPreview.projectId);
     } catch (error) {
       await Promise.allSettled(storedIds.map(deleteStoredSourceFile));
+      if (syncEnabled) {
+        await Promise.allSettled(storedIds.map(deleteCloudSourceFile));
+      }
       setImportError(
         error instanceof Error
           ? error.message
@@ -2189,6 +2946,7 @@ export default function PotatoFlowApp() {
       objective: customTaskDraft.objective.trim() || title,
       why: customTaskDraft.why.trim(),
       note: customTaskDraft.note.trim(),
+      result_report: "",
       steps,
       acceptance_criteria: criteria,
       scheduled_date: dateValue,
@@ -2293,80 +3051,89 @@ export default function PotatoFlowApp() {
     });
   }
 
-  function toggleTaskChecklist(
-    taskId: string,
-    group: "steps" | "criteria",
-    index: number,
-  ) {
-    setExecutionDraft((task) => {
-        if (!task || task.id !== taskId) return task;
-        const stepResults = (task.steps || []).map(
-          (_, itemIndex) => task.step_results?.[itemIndex] || false,
-        );
-        const criterionResults = task.acceptance_criteria.map(
-          (_, itemIndex) => task.criterion_results?.[itemIndex] || false,
-        );
-        const stepReports = (task.steps || []).map(
-          (_, itemIndex) => task.step_reports?.[itemIndex] || "",
-        );
-        if (group === "steps") stepResults[index] = !stepResults[index];
-        if (group === "criteria") {
-          criterionResults[index] = !criterionResults[index];
+  function toggleTaskCompletion(taskId: string, occurrenceDate?: string) {
+    updateStore((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) => {
+        if (task.id !== taskId) return task;
+        if (task.recurrence && occurrenceDate) {
+          const currentOccurrence = taskForDate(task, occurrenceDate);
+          const completed = currentOccurrence.status !== "done";
+          const stepResults = (task.steps || []).map(() => completed);
+          return {
+            ...task,
+            occurrence_results: {
+              ...(task.occurrence_results || {}),
+              [occurrenceDate]: {
+                step_results: stepResults,
+                step_reports: [
+                  ...(currentOccurrence.step_reports || []),
+                ],
+                criterion_results: [
+                  ...(currentOccurrence.criterion_results || []),
+                ],
+                result_report: currentOccurrence.result_report || "",
+                completed,
+                paused: completed ? false : currentOccurrence.paused,
+              },
+            },
+          };
         }
-        const checks = [...stepResults, ...criterionResults];
-        const allComplete = checks.length > 0 && checks.every(Boolean);
-        const hasActivity =
-          checks.some(Boolean) ||
-          stepReports.some((report) => report.trim().length > 0);
-        const status: TaskStatus =
-          allComplete
-            ? "done"
-            : hasActivity
-              ? "doing"
-              : task.scheduled_date
-                ? "scheduled"
-                : "backlog";
+        const completed = task.status !== "done";
         return {
           ...task,
-          step_results: stepResults,
-          step_reports: stepReports,
-          criterion_results: criterionResults,
-          status,
-        };
-    });
-  }
-
-  function updateStepReport(taskId: string, index: number, value: string) {
-    setExecutionDraft((task) => {
-        if (!task || task.id !== taskId) return task;
-        const stepResults = (task.steps || []).map(
-          (_, itemIndex) => task.step_results?.[itemIndex] || false,
-        );
-        const criterionResults = task.acceptance_criteria.map(
-          (_, itemIndex) => task.criterion_results?.[itemIndex] || false,
-        );
-        const stepReports = (task.steps || []).map(
-          (_, itemIndex) => task.step_reports?.[itemIndex] || "",
-        );
-        stepReports[index] = value;
-        const checks = [...stepResults, ...criterionResults];
-        const allComplete = checks.length > 0 && checks.every(Boolean);
-        const hasActivity =
-          checks.some(Boolean) ||
-          stepReports.some((report) => report.trim().length > 0);
-        return {
-          ...task,
-          step_results: stepResults,
-          step_reports: stepReports,
-          criterion_results: criterionResults,
-          status: allComplete
+          step_results: (task.steps || []).map(() => completed),
+          status: completed
             ? "done"
-            : hasActivity
+            : (task.result_report || "").trim()
               ? "doing"
               : task.scheduled_date
                 ? "scheduled"
                 : "backlog",
+          paused: completed ? false : task.paused,
         };
+      }),
+    }));
+  }
+
+  function setDraftStepCompleted(stepIndex: number, completed: boolean) {
+    setExecutionDraft((task) => {
+      if (!task) return task;
+      const stepResults = (task.steps || []).map(
+        (_, index) =>
+          index === stepIndex
+            ? completed
+            : task.step_results?.[index] === true,
+      );
+      const allComplete =
+        stepResults.length > 0 && stepResults.every(Boolean);
+      const hasProgress = stepResults.some(Boolean);
+      return {
+        ...task,
+        step_results: stepResults,
+        status: allComplete
+          ? "done"
+          : task.status === "cancelled"
+            ? "cancelled"
+            : task.status === "blocked"
+              ? "blocked"
+              : hasProgress || (task.result_report || "").trim()
+                ? "doing"
+                : task.scheduled_date
+                  ? "scheduled"
+                  : "backlog",
+        paused: allComplete ? false : task.paused,
+      };
+    });
+  }
+
+  function setDraftStepNote(stepIndex: number, note: string) {
+    setExecutionDraft((task) => {
+      if (!task) return task;
+      const stepReports = (task.steps || []).map((_, index) =>
+        index === stepIndex ? note : task.step_reports?.[index] || "",
+      );
+      return { ...task, step_reports: stepReports };
     });
   }
 
@@ -2387,6 +3154,8 @@ export default function PotatoFlowApp() {
                 criterion_results: [
                   ...(currentOccurrence.criterion_results || []),
                 ],
+                result_report: currentOccurrence.result_report || "",
+                completed: currentOccurrence.status === "done",
                 paused: !currentOccurrence.paused,
               },
             },
@@ -2406,6 +3175,7 @@ export default function PotatoFlowApp() {
       projectTaskDrafts: JSON.parse(
         JSON.stringify(projectTaskDrafts),
       ) as Task[],
+      projectMilestoneDrafts: [...projectMilestoneDrafts],
       improvementDraft,
       executionTipTitleDraft,
       executionTipsDraft,
@@ -2428,6 +3198,7 @@ export default function PotatoFlowApp() {
     setProjectTaskDrafts(
       JSON.parse(JSON.stringify(snapshot.projectTaskDrafts)) as Task[],
     );
+    setProjectMilestoneDrafts([...snapshot.projectMilestoneDrafts]);
     setImprovementDraft(snapshot.improvementDraft);
     setExecutionTipTitleDraft(snapshot.executionTipTitleDraft);
     setExecutionTipsDraft(snapshot.executionTipsDraft);
@@ -2482,6 +3253,14 @@ export default function PotatoFlowApp() {
         step_reports: occurrence?.step_reports || task.step_reports || [],
         criterion_results:
           occurrence?.criterion_results || task.criterion_results || [],
+        result_report:
+          occurrence?.result_report || task.result_report || "",
+        status:
+          occurrence?.completed === true
+            ? "done"
+            : task.status === "done"
+              ? "scheduled"
+              : task.status,
         paused: occurrence?.paused || task.paused || false,
       });
       return;
@@ -2499,6 +3278,8 @@ export default function PotatoFlowApp() {
         step_results: [...(task.step_results || [])],
         step_reports: [...(task.step_reports || [])],
         criterion_results: [...(task.criterion_results || [])],
+        result_report: task.result_report || "",
+        completed: task.status === "done",
         paused: task.paused || false,
       };
     }
@@ -2509,9 +3290,59 @@ export default function PotatoFlowApp() {
     });
   }
 
-  function addProjectTaskDraft() {
-    if (!planProject) return;
-    checkpointPlanOperation(`add-task:${projectTaskDrafts.length}`);
+  function addProjectMilestoneDraft() {
+    const milestone = newMilestoneName.trim();
+    if (!projectEditDraft || !milestone) return;
+    if (projectMilestoneDrafts.includes(milestone)) return;
+    checkpointPlanOperation(`add-milestone:${milestone}`);
+    setProjectMilestoneDrafts((milestones) => [...milestones, milestone]);
+    setNewMilestoneName("");
+    setAddingMilestone(false);
+  }
+
+  function renameProjectMilestone(previous: string, nextValue: string) {
+    const next = nextValue.trim();
+    if (!projectEditDraft || !next || previous === next) return;
+    if (projectMilestoneDrafts.includes(next)) {
+      window.alert("已经存在同名阶段，请换一个名称。");
+      return;
+    }
+    checkpointPlanOperation(`rename-milestone:${previous}`);
+    setProjectMilestoneDrafts((milestones) =>
+      milestones.map((milestone) => (milestone === previous ? next : milestone)),
+    );
+    setProjectTaskDrafts((tasks) =>
+      tasks.map((task) =>
+        (task.milestone?.trim() || "未分组任务") === previous
+          ? { ...task, milestone: next }
+          : task,
+      ),
+    );
+  }
+
+  function removeProjectMilestone(milestone: string) {
+    if (!projectEditDraft) return;
+    const milestoneTasks = projectTaskDrafts.filter(
+      (task) => (task.milestone?.trim() || "未分组任务") === milestone,
+    );
+    const message = milestoneTasks.length
+      ? `“${milestone}”中有 ${milestoneTasks.length} 项子任务。删除阶段会同时删除这些子任务，保存后无法恢复。确定继续吗？`
+      : `确定删除空阶段“${milestone}”吗？`;
+    if (!window.confirm(message)) return;
+    checkpointPlanOperation(`remove-milestone:${milestone}`);
+    setProjectMilestoneDrafts((milestones) =>
+      milestones.filter((item) => item !== milestone),
+    );
+    setProjectTaskDrafts((tasks) =>
+      tasks.filter(
+        (task) => (task.milestone?.trim() || "未分组任务") !== milestone,
+      ),
+    );
+  }
+
+  function addProjectTaskDraft(milestone: string) {
+    if (!planProject || !projectEditDraft) return;
+    checkpointPlanOperation(`add-task:${milestone}:${projectTaskDrafts.length}`);
     const createdAt = new Date().toISOString();
     setProjectTaskDrafts((tasks) => [
       ...tasks,
@@ -2519,11 +3350,12 @@ export default function PotatoFlowApp() {
         id: `task-${crypto.randomUUID()}`,
         project_id: planProject.id,
         parent_id: null,
-        milestone: "新任务",
-        title: "未命名任务",
+        milestone,
+        title: "未命名子任务",
         objective: "填写这项任务需要达成的结果。",
         why: "",
         note: "",
+        result_report: "",
         steps: [],
         acceptance_criteria: ["完成任务并记录结果"],
         scheduled_date: localDate(),
@@ -2549,6 +3381,15 @@ export default function PotatoFlowApp() {
     setProjectTaskDrafts((tasks) =>
       tasks.filter((task) => task.id !== taskId),
     );
+    setSwipedProjectTaskId(null);
+  }
+
+  function confirmRemoveProjectTask(task: Task) {
+    if (
+      window.confirm(`确定删除“${task.title || "未命名子任务"}”吗？保存项目后将无法恢复。`)
+    ) {
+      removeProjectTaskDraft(task.id);
+    }
   }
 
   function finishClosingPlan() {
@@ -2558,6 +3399,11 @@ export default function PotatoFlowApp() {
     setProjectTaskDrafts([]);
     setProjectTaskDraftProjectId(null);
     setProjectTaskBaseline("[]");
+    setProjectMilestoneDrafts([]);
+    setProjectMilestoneBaseline("[]");
+    setNewMilestoneName("");
+    setAddingMilestone(false);
+    setSwipedProjectTaskId(null);
     setPlanUndoStack([]);
     planOperationKeyRef.current = null;
   }
@@ -2615,6 +3461,7 @@ export default function PotatoFlowApp() {
           step_results: [...(existing.step_results || [])],
           step_reports: [...(existing.step_reports || [])],
           criterion_results: [...(existing.criterion_results || [])],
+          result_report: existing.result_report || "",
         };
         return {
           ...draft,
@@ -2657,6 +3504,7 @@ export default function PotatoFlowApp() {
                   ? tips
                   : DEFAULT_EXECUTION_TIPS,
                 execution_improvements: improvementDraft.trim(),
+                milestones: projectMilestoneDrafts,
                 revision:
                   (project.revision || 1) +
                   (planHasUnsavedChanges ? 1 : 0),
@@ -2684,6 +3532,9 @@ export default function PotatoFlowApp() {
     } else {
       setProjectEditDraft(null);
       setProjectTaskBaseline(JSON.stringify(projectTaskDrafts));
+      setProjectMilestoneBaseline(JSON.stringify(projectMilestoneDrafts));
+      setAddingMilestone(false);
+      setNewMilestoneName("");
       setPlanUndoStack([]);
       planOperationKeyRef.current = null;
     }
@@ -2698,6 +3549,9 @@ export default function PotatoFlowApp() {
     const projectId = planProject.id;
     const fileIds = (planProject.source_files || []).map((file) => file.id);
     await Promise.allSettled(fileIds.map(deleteStoredSourceFile));
+    if (syncEnabled) {
+      await Promise.allSettled(fileIds.map(deleteCloudSourceFile));
+    }
     updateStore((current) => ({
       ...current,
       projects: current.projects.filter(
@@ -2792,6 +3646,7 @@ export default function PotatoFlowApp() {
     try {
       setFileBusy(true);
       await storeSourceFile(metadata.id, file);
+      if (syncEnabled) await uploadCloudSourceFile(metadata.id, file);
       updateStore((current) => {
         const effectiveTarget = current.tasks.some(
           (task) => task.project_id === projectId,
@@ -2851,8 +3706,12 @@ export default function PotatoFlowApp() {
           }),
         );
       }
-    } catch {
-      setFileError("原文件保存失败，请重新选择。");
+    } catch (error) {
+      setFileError(
+        error instanceof Error
+          ? error.message
+          : "原文件保存失败，请重新选择。",
+      );
     } finally {
       setFileBusy(false);
     }
@@ -2867,7 +3726,16 @@ export default function PotatoFlowApp() {
     setFileError("");
     setFileBusy(true);
     try {
-      const blob = await loadSourceFile(metadata.id);
+      let blob = await loadSourceFile(metadata.id);
+      if (!blob && syncEnabled) {
+        blob = await loadCloudSourceFile(metadata.id);
+        if (blob) {
+          await storeSourceFile(
+            metadata.id,
+            new File([blob], metadata.name, { type: metadata.type }),
+          );
+        }
+      }
       if (!blob) throw new Error("missing");
       closeFilePreview();
       const extension = metadata.name.split(".").pop()?.toLowerCase();
@@ -2918,6 +3786,37 @@ export default function PotatoFlowApp() {
     setExportCopied(true);
   }
 
+  const syncStatusLabel =
+    syncStatus === "checking"
+      ? "正在检查云端数据"
+      : syncStatus === "saving"
+        ? "正在同步"
+        : syncStatus === "ready"
+          ? "云同步已完成"
+          : syncStatus === "choice"
+            ? "等待确认同步方式"
+            : syncStatus === "offline"
+              ? "当前离线，修改已保存在本机"
+              : syncStatus === "error"
+                ? "云同步出现问题"
+                : "当前仅保存在此浏览器";
+  const localSyncTime = syncChoice?.localUpdatedAt
+    ? Date.parse(syncChoice.localUpdatedAt)
+    : Number.NaN;
+  const cloudSyncTime = syncChoice?.cloudUpdatedAt
+    ? Date.parse(syncChoice.cloudUpdatedAt)
+    : Number.NaN;
+  const recommendedSyncCopy: "local" | "cloud" | "same-time" =
+    !syncChoice?.cloudStore || !Number.isFinite(cloudSyncTime)
+      ? "local"
+      : !Number.isFinite(localSyncTime)
+        ? "cloud"
+        : localSyncTime > cloudSyncTime
+          ? "local"
+          : cloudSyncTime > localSyncTime
+            ? "cloud"
+            : "same-time";
+
   if (!hydrated) {
     return (
       <div className={styles.loading}>
@@ -2958,8 +3857,15 @@ export default function PotatoFlowApp() {
         </nav>
 
         <div className={styles.sidebarNote}>
-          <span>本地模式</span>
-          <p>数据只保存在当前浏览器，没有预置任何项目。</p>
+          <span>{syncEnabled ? "云同步" : "本地模式"}</span>
+          <p>{syncStatusLabel}</p>
+          {syncEnabled ? (
+            <small>身份仅在服务端用于隔离数据</small>
+          ) : (
+            <a href="/signin-with-chatgpt?return_to=%2F">
+              登录后在手机和电脑同步
+            </a>
+          )}
         </div>
       </aside>
 
@@ -3005,17 +3911,65 @@ export default function PotatoFlowApp() {
           </div>
         </header>
 
+        <section
+          className={`${styles.syncBar} ${
+            syncStatus === "offline" || syncStatus === "error"
+              ? styles.syncBarWarning
+              : ""
+          }`}
+          aria-live="polite"
+        >
+          <div>
+            <span className={styles.syncDot} aria-hidden="true" />
+            <div>
+              <strong>{syncStatusLabel}</strong>
+              <small>
+                {syncEnabled
+                  ? "任务、进度、备注、问题和 Word、PDF 原文件都会在你的设备间同步。"
+                  : "登录同一个 ChatGPT 账号，即可在电脑和手机查看同一份任务数据。"}
+              </small>
+            </div>
+          </div>
+          {syncEnabled ? (
+            <div className={styles.syncBarActions}>
+              {(syncStatus === "offline" || syncStatus === "local") && (
+                <button
+                  className={styles.quietButton}
+                  onClick={() => setSyncRetry((value) => value + 1)}
+                >
+                  重新连接
+                </button>
+              )}
+              <a
+                className={styles.syncTextLink}
+                href="/signout-with-chatgpt?return_to=%2F"
+              >
+                退出登录
+              </a>
+            </div>
+          ) : (
+            <a
+              className={styles.primaryButton}
+              href="/signin-with-chatgpt?return_to=%2F"
+            >
+              登录并开启同步
+            </a>
+          )}
+        </section>
+
         {activeTab === "today" && (
-          <section className={styles.pageGrid}>
+          <section
+            className={styles.pageGrid}
+            onTouchStart={beginSwipe}
+            onTouchEnd={(event) =>
+              finishSwipe(event, () => moveSelectedDate(1), () => moveSelectedDate(-1))
+            }
+          >
             <div className={styles.primaryColumn}>
               <div className={styles.dateStrip}>
                 <button
                   aria-label="前一天"
-                  onClick={() => {
-                    const date = new Date(`${selectedDate}T12:00:00`);
-                    date.setDate(date.getDate() - 1);
-                    setSelectedDate(localDate(date));
-                  }}
+                  onClick={() => moveSelectedDate(-1)}
                 >
                   ←
                 </button>
@@ -3068,11 +4022,7 @@ export default function PotatoFlowApp() {
                 </div>
                 <button
                   aria-label="后一天"
-                  onClick={() => {
-                    const date = new Date(`${selectedDate}T12:00:00`);
-                    date.setDate(date.getDate() + 1);
-                    setSelectedDate(localDate(date));
-                  }}
+                  onClick={() => moveSelectedDate(1)}
                 >
                   →
                 </button>
@@ -3162,28 +4112,66 @@ export default function PotatoFlowApp() {
                                   查看项目 →
                                 </button>
                               </div>
-                              {projectTasks.map((task) => {
-                                const visibleTask =
-                                  executionDraft?.id === task.id
-                                    ? executionDraft
-                                    : task;
+                              {Array.from(
+                                projectTasks.reduce((milestones, task) => {
+                                  const milestone =
+                                    task.milestone?.trim() || "未分组任务";
+                                  const tasks = milestones.get(milestone) || [];
+                                  tasks.push(task);
+                                  milestones.set(milestone, tasks);
+                                  return milestones;
+                                }, new Map<string, Task[]>()),
+                              ).map(([milestone, milestoneTasks]) => {
+                                const completed = milestoneTasks.filter(
+                                  (task) => taskCompletion(task) === 100,
+                                ).length;
                                 return (
-                                  <TaskCard
-                                    key={`${task.id}-${task.occurrence_date || ""}`}
-                                    task={visibleTask}
-                                    onOpen={() =>
-                                      openTask(
-                                        task.id,
-                                        task.occurrence_date,
-                                      )
-                                    }
-                                    onPause={() =>
-                                      toggleTaskPaused(
-                                        task.id,
-                                        task.occurrence_date,
-                                      )
-                                    }
-                                  />
+                                  <section
+                                    className={styles.taskMilestoneGroup}
+                                    key={`${projectId}-${milestone}`}
+                                  >
+                                    <header
+                                      className={styles.taskMilestoneHeader}
+                                    >
+                                      <div>
+                                        <span>阶段</span>
+                                        <strong>{milestone}</strong>
+                                      </div>
+                                      <small>
+                                        {completed}/{milestoneTasks.length}
+                                      </small>
+                                    </header>
+                                    {milestoneTasks.map((task) => {
+                                      const visibleTask =
+                                        executionDraft?.id === task.id
+                                          ? executionDraft
+                                          : task;
+                                      return (
+                                        <TaskCard
+                                          key={`${task.id}-${task.occurrence_date || ""}`}
+                                          task={visibleTask}
+                                          onOpen={() =>
+                                            openTask(
+                                              task.id,
+                                              task.occurrence_date,
+                                            )
+                                          }
+                                          onToggleComplete={() =>
+                                            toggleTaskCompletion(
+                                              task.id,
+                                              task.occurrence_date,
+                                            )
+                                          }
+                                          onPause={() =>
+                                            toggleTaskPaused(
+                                              task.id,
+                                              task.occurrence_date,
+                                            )
+                                          }
+                                        />
+                                      );
+                                    })}
+                                  </section>
                                 );
                               })}
                             </div>
@@ -3809,7 +4797,7 @@ export default function PotatoFlowApp() {
               <>
                 <p className={styles.modalHint}>
                   用“导出数据 → 全量备份”得到的 JSON
-                  可以恢复项目、任务、完成记录和问题。原文件本体不会包含在 JSON 中，需要重新添加。
+                  可以恢复项目、任务、完成记录和问题。原文件不会写入 JSON；登录同一账号仍可从云端读取。
                 </p>
                 <div className={styles.backupWarning}>
                   <strong>恢复会替换当前浏览器里的全部数据</strong>
@@ -4013,7 +5001,7 @@ export default function PotatoFlowApp() {
                     />
                   </label>
                   <label className={styles.customTaskWide}>
-                    <span>执行步骤（每行一条）</span>
+                    <span>执行步骤（仅用于查看流程，每行一条）</span>
                     <textarea
                       value={customTaskDraft.steps}
                       onChange={(event) =>
@@ -4026,7 +5014,7 @@ export default function PotatoFlowApp() {
                     />
                   </label>
                   <label className={styles.customTaskWide}>
-                    <span>完成标准（每行一条）</span>
+                    <span>完成标准（用于判断整项任务，每行一条）</span>
                     <textarea
                       value={customTaskDraft.acceptanceCriteria}
                       onChange={(event) =>
@@ -4476,80 +5464,88 @@ export default function PotatoFlowApp() {
               <>
                 <p className={styles.taskObjective}>{planProject.objective}</p>
 
-                <div className={styles.planDetails}>
-                  <PlanBlock title="项目背景">
-                    <p>{planProject.background || "还没有记录项目背景。"}</p>
-                  </PlanBlock>
-                  <PlanBlock title="成功标准">
-                    <ul>
-                      {(planProject.success_criteria || []).map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </PlanBlock>
-                  <PlanBlock title="限制条件">
-                    <ul>
-                      {(planProject.constraints || []).map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </PlanBlock>
-                  <PlanBlock title="当前假设">
-                    <ul>
-                      {(planProject.assumptions || []).map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </PlanBlock>
-                </div>
+                <details className={styles.projectContextDetails}>
+                  <summary>
+                    <span>
+                      <strong>项目说明</strong>
+                      <small>需要时再查看背景、标准和边界</small>
+                    </span>
+                    <b aria-hidden="true">⌄</b>
+                  </summary>
+                  <div className={styles.planDetails}>
+                    <PlanBlock title="项目背景">
+                      <p>{planProject.background || "还没有记录项目背景。"}</p>
+                    </PlanBlock>
+                    <PlanBlock title="成功标准">
+                      <ul>
+                        {(planProject.success_criteria || []).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </PlanBlock>
+                    <PlanBlock title="限制条件">
+                      <ul>
+                        {(planProject.constraints || []).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </PlanBlock>
+                    <PlanBlock title="当前假设">
+                      <ul>
+                        {(planProject.assumptions || []).map((item) => (
+                          <li key={item}>{item}</li>
+                        ))}
+                      </ul>
+                    </PlanBlock>
+                  </div>
+                </details>
               </>
             )}
 
-            <section className={styles.projectCategoryPanel}>
-              <div className={styles.projectCategoryHeader}>
-                <div>
-                  <p className={styles.eyebrow}>任务标签</p>
-                  <h3>
-                    {projectTaskDrafts.length === 0
-                      ? "还没有任务"
-                      : projectCommonCategory
-                        ? CATEGORY_LABELS[projectCommonCategory]
-                        : "当前包含多个标签"}
-                  </h3>
+            {projectEditDraft ? (
+              <section className={styles.projectCategoryPanel}>
+                <div className={styles.projectCategoryHeader}>
+                  <div>
+                    <p className={styles.eyebrow}>任务标签</p>
+                    <h3>
+                      {projectTaskDrafts.length === 0
+                        ? "还没有任务"
+                        : projectCommonCategory
+                          ? CATEGORY_LABELS[projectCommonCategory]
+                          : "当前包含多个标签"}
+                    </h3>
+                  </div>
+                  <span>{projectTaskDrafts.length} 项任务</span>
                 </div>
-                <span>{projectTaskDrafts.length} 项任务</span>
-              </div>
-              <div
-                className={styles.categoryPicker}
-                aria-label="统一设置项目任务标签"
-              >
-                {(Object.keys(CATEGORY_LABELS) as TaskCategory[]).map(
-                  (category) => (
-                    <button
-                      className={
-                        projectCommonCategory === category
-                          ? styles.categorySelected
-                          : ""
-                      }
-                      disabled={
-                        !projectEditDraft ||
-                        projectTaskDrafts.length === 0
-                      }
-                      key={category}
-                      onClick={() =>
-                        updateAllProjectTaskCategories(category)
-                      }
-                      type="button"
-                    >
-                      {CATEGORY_LABELS[category]}
-                    </button>
-                  ),
-                )}
-              </div>
-              <small>
-                点击“编辑项目”后可统一调整本项目任务；需要不同标签时，仍可在下方逐条任务中单独修改。
-              </small>
-            </section>
+                <div
+                  className={styles.categoryPicker}
+                  aria-label="统一设置项目任务标签"
+                >
+                  {(Object.keys(CATEGORY_LABELS) as TaskCategory[]).map(
+                    (category) => (
+                      <button
+                        className={
+                          projectCommonCategory === category
+                            ? styles.categorySelected
+                            : ""
+                        }
+                        disabled={projectTaskDrafts.length === 0}
+                        key={category}
+                        onClick={() =>
+                          updateAllProjectTaskCategories(category)
+                        }
+                        type="button"
+                      >
+                        {CATEGORY_LABELS[category]}
+                      </button>
+                    ),
+                  )}
+                </div>
+                <small>
+                  统一设置本项目任务标签；需要不同标签时，可在下方逐条任务中单独修改。
+                </small>
+              </section>
+            ) : null}
 
             <section className={styles.projectTaskPlanner}>
               <fieldset
@@ -4557,31 +5553,164 @@ export default function PotatoFlowApp() {
                 disabled={!projectEditDraft}
               >
               <div className={styles.projectTaskPlannerHeader}>
-                <div>
+                <div className={styles.planModuleHeader}>
+                  <span className={styles.planModuleNumber}>01</span>
+                  <div>
                   <p className={styles.eyebrow}>项目任务规划</p>
-                  <h3>统一调整任务、内容与日期</h3>
+                  <h3>
+                    {projectEditDraft
+                      ? "统一调整任务、内容与日期"
+                      : "阶段与任务"}
+                  </h3>
+                  <small>先看阶段，再展开具体任务</small>
+                  </div>
                 </div>
-                <button
-                  className={styles.projectEditButton}
-                  onClick={addProjectTaskDraft}
-                >
-                  ＋ 新增任务
-                </button>
+                {projectEditDraft && (
+                  <button
+                    className={styles.projectEditButton}
+                    onClick={() => setAddingMilestone(true)}
+                    type="button"
+                  >
+                    ＋ 新增阶段
+                  </button>
+                )}
               </div>
+              {projectEditDraft && addingMilestone && (
+                <div className={styles.newMilestoneForm}>
+                  <label>
+                    <span>新阶段名称</span>
+                    <input
+                      autoFocus
+                      value={newMilestoneName}
+                      onChange={(event) => setNewMilestoneName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          addProjectMilestoneDraft();
+                        }
+                        if (event.key === "Escape") {
+                          setAddingMilestone(false);
+                          setNewMilestoneName("");
+                        }
+                      }}
+                      placeholder="例如：内容准备"
+                    />
+                  </label>
+                  <button
+                    className={styles.quietButton}
+                    type="button"
+                    onClick={() => {
+                      setAddingMilestone(false);
+                      setNewMilestoneName("");
+                    }}
+                  >
+                    取消
+                  </button>
+                  <button
+                    className={styles.primaryButton}
+                    type="button"
+                    disabled={!newMilestoneName.trim()}
+                    onClick={addProjectMilestoneDraft}
+                  >
+                    创建阶段
+                  </button>
+                </div>
+              )}
               {projectTaskDrafts.length === 0 ? (
                 <div className={styles.projectTaskPlannerEmpty}>
                   当前项目还没有任务，可以从这里开始制定。
                 </div>
               ) : (
                 <div className={styles.projectTaskEditorList}>
-                  {projectTaskDrafts.map((task, index) => (
+                  {projectTaskGroups.map((group, groupIndex) => (
+                    <section className={styles.projectMilestoneGroup} key={group.milestone}>
+                      <header className={styles.projectMilestoneHeader}>
+                        <span>阶段 {String(groupIndex + 1).padStart(2, "0")}</span>
+                        {projectEditDraft ? (
+                          <input
+                            key={group.milestone}
+                            aria-label={`修改阶段名称：${group.milestone}`}
+                            defaultValue={group.milestone}
+                            onBlur={(event) =>
+                              renameProjectMilestone(
+                                group.milestone,
+                                event.target.value,
+                              )
+                            }
+                          />
+                        ) : (
+                          <strong>{group.milestone}</strong>
+                        )}
+                        <div className={styles.projectMilestoneHeaderActions}>
+                          <small>{group.tasks.length} 项子任务</small>
+                          {projectEditDraft && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => addProjectTaskDraft(group.milestone)}
+                              >
+                                ＋ 子任务
+                              </button>
+                              <button
+                                className={styles.milestoneDeleteButton}
+                                type="button"
+                                onClick={() => removeProjectMilestone(group.milestone)}
+                              >
+                                删除阶段
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </header>
+                      <div className={styles.projectMilestoneTasks}>
+                  {group.tasks.map((task, taskIndex) => {
+                    return (
                     <div
-                      className={styles.projectTaskEditorShell}
+                      className={`${styles.projectTaskEditorShell} ${
+                        swipedProjectTaskId === task.id
+                          ? styles.projectTaskEditorShellSwiped
+                          : ""
+                      }`}
                       key={task.id}
                     >
+                      {projectEditDraft && (
+                        <button
+                          className={styles.projectTaskSwipeDelete}
+                          type="button"
+                          onClick={() => confirmRemoveProjectTask(task)}
+                        >
+                          删除
+                        </button>
+                      )}
+                      <div
+                        className={styles.projectTaskSwipeSurface}
+                        onTouchStart={(event) => {
+                          if (!projectEditDraft) return;
+                          const touch = event.touches[0];
+                          projectTaskSwipeStartRef.current = touch
+                            ? { x: touch.clientX, y: touch.clientY }
+                            : null;
+                        }}
+                        onTouchEnd={(event) => {
+                          if (!projectEditDraft) return;
+                          const start = projectTaskSwipeStartRef.current;
+                          const touch = event.changedTouches[0];
+                          projectTaskSwipeStartRef.current = null;
+                          if (!start || !touch) return;
+                          const deltaX = touch.clientX - start.x;
+                          const deltaY = touch.clientY - start.y;
+                          if (
+                            Math.abs(deltaX) < 55 ||
+                            Math.abs(deltaX) < Math.abs(deltaY) * 1.3
+                          ) {
+                            return;
+                          }
+                          setSwipedProjectTaskId(deltaX < 0 ? task.id : null);
+                        }}
+                      >
                       <details className={styles.projectTaskEditor}>
                         <summary>
-                          <span>{String(index + 1).padStart(2, "0")}</span>
+                          <span>{String(taskIndex + 1).padStart(2, "0")}</span>
                           <div>
                             <strong>{task.title || "未命名任务"}</strong>
                             <small>
@@ -4751,7 +5880,7 @@ export default function PotatoFlowApp() {
                           />
                         </label>
                         <label className={styles.projectTaskWide}>
-                          <span>执行步骤（每行一条）</span>
+                          <span>执行步骤（仅用于查看流程，每行一条）</span>
                           <textarea
                             value={(task.steps || []).join("\n")}
                             onChange={(event) => {
@@ -4776,7 +5905,7 @@ export default function PotatoFlowApp() {
                           />
                         </label>
                         <label className={styles.projectTaskWide}>
-                          <span>完成标准（每行一条）</span>
+                          <span>完成标准（用于判断整项任务，每行一条）</span>
                           <textarea
                             value={task.acceptance_criteria.join("\n")}
                             onChange={(event) => {
@@ -4797,14 +5926,23 @@ export default function PotatoFlowApp() {
                           />
                         </label>
                         </div>
+                        {projectEditDraft && (
+                        <div className={styles.projectTaskEditorActions}>
+                          <button
+                            className={styles.projectTaskDeleteButton}
+                            onClick={() => confirmRemoveProjectTask(task)}
+                          >
+                            删除此任务
+                          </button>
+                        </div>
+                        )}
                       </details>
-                      <button
-                        className={styles.projectTaskDeleteButton}
-                        onClick={() => removeProjectTaskDraft(task.id)}
-                      >
-                        删除任务
-                      </button>
+                      </div>
                     </div>
+                    );
+                  })}
+                      </div>
+                    </section>
                   ))}
                 </div>
               )}
@@ -4817,9 +5955,13 @@ export default function PotatoFlowApp() {
             </section>
 
             <section className={styles.homepageTipEditor}>
-              <div>
+              <div className={styles.planModuleHeader}>
+                <span className={styles.planModuleNumber}>02</span>
+                <div>
                 <p className={styles.eyebrow}>主页执行提示</p>
                 <h3>修改首页黑色卡片显示的内容</h3>
+                <small>控制每天打开首页时最先看到的提醒</small>
+                </div>
               </div>
               <label>
                 <span>提示标题</span>
@@ -4851,9 +5993,13 @@ export default function PotatoFlowApp() {
             </section>
 
             <section className={styles.improvementPanel}>
-              <div>
+              <div className={styles.planModuleHeader}>
+                <span className={styles.planModuleNumber}>03</span>
+                <div>
                 <p className={styles.eyebrow}>执行提升</p>
                 <h3>根据实际执行持续修正规划</h3>
+                <small>记录复盘结论，不与任务正文混在一起</small>
+                </div>
               </div>
               <textarea
                 disabled={!projectEditDraft}
@@ -4868,9 +6014,13 @@ export default function PotatoFlowApp() {
 
             <section className={styles.sourceFilesPanel}>
               <div className={styles.sourceFilesHeader}>
-                <div>
+                <div className={styles.planModuleHeader}>
+                  <span className={styles.planModuleNumber}>04</span>
+                  <div>
                   <p className={styles.eyebrow}>原文件索引</p>
                   <h3>项目依据与原始资料</h3>
+                  <small>集中管理资料，并指定它属于哪项任务</small>
+                  </div>
                 </div>
                 <div className={styles.sourceUploadControls}>
                   <label>
@@ -4916,7 +6066,7 @@ export default function PotatoFlowApp() {
               </div>
               <p className={styles.filePrivacy}>
                 支持 PDF、Word（DOCX）、TXT、Markdown，单个不超过
-                20MB，仅保存在当前浏览器。已上传文件可在下方随时重新关联。
+                20MB；登录同一账号可在电脑和手机查看。已上传文件可在下方随时重新关联。
               </p>
               {fileError && <p className={styles.error}>{fileError}</p>}
               <div className={styles.sourceFileList}>
@@ -4992,7 +6142,13 @@ export default function PotatoFlowApp() {
 
       {selectedIssue && (
         <div className={styles.drawerBackdrop}>
-          <aside className={`${styles.drawer} ${styles.issueDrawer}`}>
+          <aside
+            className={`${styles.drawer} ${styles.issueDrawer}`}
+            onTouchStart={beginSwipe}
+            onTouchEnd={(event) =>
+              finishSwipe(event, undefined, () => requestCloseIssue("close"))
+            }
+          >
             <div className={styles.drawerHeader}>
               <span>{selectedIssueProject?.name || "问题详情"}</span>
               <button
@@ -5066,6 +6222,23 @@ export default function PotatoFlowApp() {
                 </ul>
               </section>
             )}
+
+            <section className={styles.issueAiAssist}>
+              <div>
+                <p className={styles.eyebrow}>交给 GPT 分析</p>
+                <h3>复制完整任务上下文和当前阻碍</h3>
+                <p>
+                  将自动整理项目背景、任务目标、执行进度、已尝试内容和问题，不包含源文件正文。
+                </p>
+              </div>
+              <button
+                className={styles.issueCopyButton}
+                type="button"
+                onClick={copyIssuePrompt}
+              >
+                {issuePromptCopied ? "已复制，可以粘贴给 GPT" : "复制给 GPT 分析"}
+              </button>
+            </section>
 
             <section className={styles.issueDetailBlock}>
               <p className={styles.eyebrow}>分析结果</p>
@@ -5292,7 +6465,14 @@ export default function PotatoFlowApp() {
 
       {selectedTask && selectedProject && (
         <div className={styles.drawerBackdrop}>
-          <aside className={styles.drawer} ref={taskDrawerRef}>
+          <aside
+            className={`${styles.drawer} ${styles.taskDetailDrawer} ${selectedTaskThemeClass}`}
+            ref={taskDrawerRef}
+            onTouchStart={beginSwipe}
+            onTouchEnd={(event) =>
+              finishSwipe(event, undefined, requestCloseTask)
+            }
+          >
             <div className={styles.drawerHeader}>
               <span>{selectedProject.name}</span>
               <button
@@ -5305,7 +6485,43 @@ export default function PotatoFlowApp() {
             <p className={styles.eyebrow}>
               {selectedTask.milestone || "未设置里程碑"}
             </p>
-            <h2>{selectedTask.title}</h2>
+            <div className={styles.detailTaskTitle}>
+              <button
+                type="button"
+                className={`${styles.detailCompletionCheck} ${
+                  selectedTask.status === "done"
+                    ? styles.detailCompletionCheckDone
+                    : ""
+                }`}
+                aria-label={
+                  selectedTask.status === "done"
+                    ? `将“${selectedTask.title}”标记为未完成`
+                    : `将“${selectedTask.title}”标记为已完成`
+                }
+                aria-pressed={selectedTask.status === "done"}
+                onClick={() =>
+                  setExecutionDraft((task) => {
+                    if (!task) return task;
+                    const completed = task.status !== "done";
+                    return {
+                      ...task,
+                      step_results: (task.steps || []).map(() => completed),
+                      status: completed
+                        ? "done"
+                        : (task.result_report || "").trim()
+                          ? "doing"
+                          : task.scheduled_date
+                            ? "scheduled"
+                            : "backlog",
+                      paused: completed ? false : task.paused,
+                    };
+                  })
+                }
+              >
+                {selectedTask.status === "done" ? "✓" : ""}
+              </button>
+              <h2>{selectedTask.title}</h2>
+            </div>
             <p className={styles.taskObjective}>{selectedTask.objective}</p>
 
             <div className={styles.detailMeta}>
@@ -5347,31 +6563,37 @@ export default function PotatoFlowApp() {
                   ? styles.taskProgressComplete
                   : ""
               }`}
-              aria-live="polite"
+              aria-label={`任务进度 ${selectedTaskProgress}%`}
             >
               <div className={styles.taskProgressHeader}>
                 <div>
                   <p className={styles.eyebrow}>任务进度</p>
                   <strong>
                     {selectedTaskProgress === 100
-                      ? "全部完成，获得满分王冠"
-                      : `当前完成 ${selectedTaskProgress}%`}
+                      ? "全部步骤已完成"
+                      : `已完成 ${
+                          (selectedTask.step_results || []).filter(Boolean)
+                            .length
+                        } / ${selectedTask.steps?.length || 0} 个步骤`}
                   </strong>
                 </div>
                 <b>{selectedTaskProgress}</b>
               </div>
               <div
                 className={styles.taskProgressTrack}
-                aria-label={`当前任务完成度 ${selectedTaskProgress}%`}
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={selectedTaskProgress}
               >
                 <i style={{ width: `${selectedTaskProgress}%` }} />
               </div>
               {selectedTaskProgress === 100 && (
-                <div className={styles.crownReward} aria-label="满分王冠">
-                  <span className={styles.crownSparkle}>✦</span>
-                  <span className={styles.crownIcon}>👑</span>
-                  <span className={styles.crownSparkle}>✦</span>
-                  <small>满分完成</small>
+                <div className={styles.crownReward}>
+                  <span className={styles.crownIcon} aria-hidden="true">
+                    👑
+                  </span>
+                  <strong>满分完成</strong>
                 </div>
               )}
             </section>
@@ -5500,42 +6722,68 @@ export default function PotatoFlowApp() {
             >
               {selectedTask.steps?.length ? (
                 <ol className={styles.stepList}>
-                  {selectedTask.steps.map((step, index) => (
+                  {selectedTask.steps.map((step, stepIndex) => {
+                    const completed =
+                      selectedTask.step_results?.[stepIndex] === true;
+                    const note = selectedTask.step_reports?.[stepIndex] || "";
+                    const noteOpen = openStepNoteIndex === stepIndex;
+                    const noteId = `step-note-${selectedTask.id}-${stepIndex}`;
+                    return (
                     <li
-                      className={
-                        selectedTask.step_results?.[index]
-                          ? styles.checklistItemDone
-                          : ""
-                      }
-                      key={step}
+                      className={completed ? styles.stepItemDone : undefined}
+                      key={`${stepIndex}-${step}`}
                     >
-                      <button
-                        aria-label={`${selectedTask.step_results?.[index] ? "取消完成" : "标记完成"}：${step}`}
-                        onClick={() =>
-                          toggleTaskChecklist(selectedTask.id, "steps", index)
-                        }
-                      >
+                      <div className={styles.stepItemRow}>
                         <span>{step}</span>
-                        <i>
-                          {selectedTask.step_results?.[index] ? "✓" : ""}
-                        </i>
-                      </button>
-                      <label className={styles.stepReport}>
-                        <span>本步骤完成情况 / 结果数据</span>
-                        <textarea
-                          value={selectedTask.step_reports?.[index] || ""}
-                          onChange={(event) =>
-                            updateStepReport(
-                              selectedTask.id,
-                              index,
-                              event.target.value,
+                        <button
+                          type="button"
+                          className={`${styles.stepCheckButton} ${
+                            completed ? styles.stepCheckButtonDone : ""
+                          }`}
+                          aria-label={
+                            completed
+                              ? `取消完成步骤 ${stepIndex + 1}`
+                              : `完成步骤 ${stepIndex + 1}`
+                          }
+                          aria-pressed={completed}
+                          onClick={() =>
+                            setDraftStepCompleted(stepIndex, !completed)
+                          }
+                        >
+                          {completed ? "✓" : ""}
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.stepNoteButton} ${
+                            note ? styles.stepNoteButtonHasContent : ""
+                          }`}
+                          aria-expanded={noteOpen}
+                          aria-controls={noteId}
+                          onClick={() =>
+                            setOpenStepNoteIndex((current) =>
+                              current === stepIndex ? null : stepIndex,
                             )
                           }
-                          placeholder="记录实际完成了什么、得到的数据或产出，以及与计划的偏差。"
-                        />
-                      </label>
+                        >
+                          {noteOpen ? "收起" : note ? "有备注" : "备注"}
+                        </button>
+                      </div>
+                      {noteOpen && (
+                        <label className={styles.stepReport} id={noteId}>
+                          <span>本步骤备注</span>
+                          <textarea
+                            aria-label={`步骤 ${stepIndex + 1} 备注`}
+                            value={note}
+                            onChange={(event) =>
+                              setDraftStepNote(stepIndex, event.target.value)
+                            }
+                            placeholder="记录这一步的补充信息、结果或下次要注意的事项。"
+                          />
+                        </label>
+                      )}
                     </li>
-                  ))}
+                    );
+                  })}
                 </ol>
               ) : (
                 <p>还没有拆分步骤。</p>
@@ -5548,37 +6796,53 @@ export default function PotatoFlowApp() {
               variant="criteria"
             >
               <ul className={styles.criteriaList}>
-                {selectedTask.acceptance_criteria.map((criterion, index) => (
-                  <li
-                    className={
-                      selectedTask.criterion_results?.[index]
-                        ? styles.checklistItemDone
-                        : ""
-                    }
-                    key={criterion}
-                  >
-                    <button
-                      aria-label={`${selectedTask.criterion_results?.[index] ? "取消验收" : "通过验收"}：${criterion}`}
-                      onClick={() =>
-                        toggleTaskChecklist(selectedTask.id, "criteria", index)
-                      }
-                    >
-                      <i>
-                        {selectedTask.criterion_results?.[index] ? "✓" : ""}
-                      </i>
-                      <span>{criterion}</span>
-                    </button>
+                {selectedTask.acceptance_criteria.map((criterion) => (
+                  <li key={criterion}>
+                    <span>{criterion}</span>
                   </li>
                 ))}
               </ul>
             </DetailBlock>
+
+            <section className={styles.taskReportPanel}>
+              <div>
+                <p className={styles.eyebrow}>任务完成情况</p>
+                <h3>统一记录本任务的结果</h3>
+                <p>
+                  步骤旁的备注用于记录局部信息；完成整项任务后，在这里统一汇总实际产出、数据、偏差和未完成事项。
+                </p>
+              </div>
+              <textarea
+                aria-label="任务完成情况与结果汇报"
+                value={selectedTask.result_report || ""}
+                onChange={(event) =>
+                  setExecutionDraft((task) =>
+                    task
+                      ? {
+                          ...task,
+                          result_report: event.target.value,
+                          status:
+                            task.status === "done"
+                              ? "done"
+                              : event.target.value.trim()
+                                ? "doing"
+                                : task.scheduled_date
+                                  ? "scheduled"
+                                  : "backlog",
+                        }
+                      : task,
+                  )
+                }
+                placeholder="实际完成了什么？获得了什么结果或数据？与原计划有什么偏差？还有什么没有完成？"
+              />
+            </section>
 
             <div className={styles.issueComposer}>
               <div>
                 <p className={styles.eyebrow}>执行中遇到问题？</p>
                 <h3>只记录确实需要分析的问题</h3>
                 <p className={styles.issueInputHint}>
-                  每一步的完成情况请写在步骤下方；这里不要填写“没有问题”或普通完成汇报。
+                  普通完成汇报请写在上方统一汇报框；这里不要填写“没有问题”。
                 </p>
               </div>
               <textarea
@@ -5649,7 +6913,7 @@ export default function PotatoFlowApp() {
             <p className={styles.eyebrow}>发现未保存修改</p>
             <h2 id="save-changes-title">保存本次任务修改吗？</h2>
             <p>
-              将保存执行步骤、结果数据、验收清单、任务备注、标签与优先级；问题记录未填写时会自动跳过。
+              将保存步骤完成状态、步骤备注、统一结果汇报、任务备注、标签与优先级；问题记录未填写时会自动跳过。
             </p>
             <div className={styles.confirmActions}>
               <button
@@ -5733,6 +6997,118 @@ export default function PotatoFlowApp() {
             ) : (
               <pre>{filePreview.content || "文件中没有可读取的文字。"}</pre>
             )}
+          </section>
+        </div>
+      )}
+
+      {syncChoice && (
+        <div className={`${styles.modalBackdrop} ${styles.confirmBackdrop}`}>
+          <section
+            className={`${styles.confirmDialog} ${styles.syncChoiceDialog}`}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="sync-choice-title"
+          >
+            <p className={styles.eyebrow}>安全开启跨设备同步</p>
+            <h2 id="sync-choice-title">
+              {syncChoice.kind === "first-upload"
+                ? "把本机数据上传到云端吗？"
+                : syncChoice.kind === "conflict"
+                  ? "电脑和手机的数据发生了冲突"
+                  : "发现本机和云端各有一份数据"}
+            </h2>
+            <p>
+              系统不会自动覆盖。下方会根据最后修改记录标出较新版本；切换到云端前还会额外建立一份本机恢复快照。
+            </p>
+            <div className={styles.syncRecommendation}>
+              <strong>
+                {recommendedSyncCopy === "local"
+                  ? "建议：使用本机数据"
+                  : recommendedSyncCopy === "cloud"
+                    ? "建议：使用云端数据"
+                    : "两边修改时间一致，请根据内容选择"}
+              </strong>
+              <span>
+                {recommendedSyncCopy === "same-time"
+                  ? "系统无法仅凭时间判断哪份内容应保留，不会替你覆盖。"
+                  : "这是根据记录到的最后修改时间判断的，你仍可以选择另一份。"}
+              </span>
+            </div>
+            <div className={styles.syncComparison}>
+              <div
+                className={
+                  recommendedSyncCopy === "local"
+                    ? styles.syncCopyRecommended
+                    : ""
+                }
+              >
+                <span>
+                  本机数据
+                  {recommendedSyncCopy === "local" && <b>较新版本</b>}
+                </span>
+                <strong>
+                  {store.projects.length} 个项目 · {store.tasks.length} 项任务
+                </strong>
+                <small>最后修改：{formatSyncTime(syncChoice.localUpdatedAt)}</small>
+              </div>
+              <div
+                className={
+                  recommendedSyncCopy === "cloud"
+                    ? styles.syncCopyRecommended
+                    : ""
+                }
+              >
+                <span>
+                  云端数据
+                  {recommendedSyncCopy === "cloud" && <b>较新版本</b>}
+                </span>
+                <strong>
+                  {syncChoice.cloudStore
+                    ? `${syncChoice.cloudStore.projects.length} 个项目 · ${syncChoice.cloudStore.tasks.length} 项任务`
+                    : "目前为空"}
+                </strong>
+                <small>最后修改：{formatSyncTime(syncChoice.cloudUpdatedAt)}</small>
+              </div>
+            </div>
+            {syncError && <p className={styles.syncError}>{syncError}</p>}
+            <div className={styles.confirmActions}>
+              <button
+                className={`${styles.quietButton} ${styles.continueButton}`}
+                onClick={() => {
+                  syncReadyRef.current = false;
+                  setSyncChoice(null);
+                  setSyncStatus("local");
+                }}
+              >
+                暂时只用本机
+              </button>
+              {syncChoice.cloudStore && (
+                <button
+                  className={
+                    recommendedSyncCopy === "cloud"
+                      ? styles.primaryButton
+                      : styles.quietButton
+                  }
+                  onClick={useCloudCopy}
+                >
+                  {recommendedSyncCopy === "cloud"
+                    ? "使用较新的云端数据"
+                    : "使用云端数据"}
+                </button>
+              )}
+              <button
+                className={
+                  recommendedSyncCopy === "cloud"
+                    ? styles.quietButton
+                    : styles.primaryButton
+                }
+                onClick={() => void uploadLocalCopy()}
+              >
+                {recommendedSyncCopy === "local"
+                  ? "使用较新的本机数据并同步"
+                  : "上传本机数据并开启同步"}
+              </button>
+            </div>
           </section>
         </div>
       )}
@@ -5824,10 +7200,12 @@ function GettingStarted({
 function TaskCard({
   task,
   onOpen,
+  onToggleComplete,
   onPause,
 }: {
   task: Task;
   onOpen: () => void;
+  onToggleComplete: () => void;
   onPause: () => void;
 }) {
   const progress = taskCompletion(task);
@@ -5836,39 +7214,38 @@ function TaskCard({
     progress >= 100
       ? "已完成"
       : task.paused
-        ? `已暂停 · ${progress}%`
+        ? "已暂停"
         : level === "blocked"
-          ? `有阻碍 · ${progress}%`
-          : `完成 ${progress}%`;
+          ? "有阻碍"
+          : progress > 0
+            ? `完成 ${progress}%`
+            : "未完成";
   return (
     <article
       className={`${styles.taskCard} ${styles[`taskLevel_${level}`]} ${
         level === "done" ? styles.taskDone : ""
       }`}
     >
-      <span
+      <button
+        type="button"
         className={`${styles.checkButton} ${
           level === "incomplete" ? styles.checkButtonPartial : ""
         } ${level === "blocked" ? styles.checkButtonBlocked : ""}`}
         aria-label={
           level === "done"
-            ? "任务已完成"
-            : level === "blocked"
-              ? "任务有阻碍"
-              : `任务完成度 ${progress}%`
+            ? `将“${task.title}”标记为未完成`
+            : `将“${task.title}”标记为已完成`
         }
-        role="img"
+        aria-pressed={level === "done"}
+        onClick={onToggleComplete}
       >
         {level === "done"
           ? "✓"
           : level === "blocked"
             ? "!"
-            : progress > 0
-              ? "–"
-              : ""}
-      </span>
+            : ""}
+      </button>
       <button className={styles.taskContent} onClick={onOpen}>
-        <span>{task.milestone || "未分组"}</span>
         <div className={styles.taskTitleLine}>
           <strong title={task.title}>{compactTitle(task.title)}</strong>
           <small className={styles[`inlineLevel_${level}`]}>
@@ -5879,12 +7256,6 @@ function TaskCard({
           {priorityLabel(task.priority)} ·{" "}
           {minutesLabel(task.estimated_minutes)}
         </em>
-        <div
-          className={styles.taskProgressBar}
-          aria-label={`任务完成度 ${progress}%`}
-        >
-          <i style={{ width: `${progress}%` }} />
-        </div>
       </button>
       <div className={styles.taskMeta}>
         <span
@@ -5919,6 +7290,7 @@ function CalendarView({
   onMonthChange: (value: Date) => void;
   onDayOpen: (date: string) => void;
 }) {
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
   const firstDay = new Date(year, monthIndex, 1).getDay();
@@ -5930,7 +7302,32 @@ function CalendarView({
   while (cells.length % 7) cells.push(null);
 
   return (
-    <section className={styles.calendarPanel}>
+    <section
+      className={styles.calendarPanel}
+      onTouchStart={(event) => {
+        const touch = event.touches[0];
+        swipeStart.current = touch
+          ? { x: touch.clientX, y: touch.clientY }
+          : null;
+      }}
+      onTouchEnd={(event) => {
+        const start = swipeStart.current;
+        const touch = event.changedTouches[0];
+        swipeStart.current = null;
+        if (!start || !touch) return;
+        const deltaX = touch.clientX - start.x;
+        const deltaY = touch.clientY - start.y;
+        if (
+          Math.abs(deltaX) < 70 ||
+          Math.abs(deltaX) < Math.abs(deltaY) * 1.35
+        ) {
+          return;
+        }
+        onMonthChange(
+          new Date(year, monthIndex + (deltaX < 0 ? 1 : -1), 1),
+        );
+      }}
+    >
       <div className={styles.calendarHeader}>
         <div>
           <p className={styles.eyebrow}>任务安排</p>

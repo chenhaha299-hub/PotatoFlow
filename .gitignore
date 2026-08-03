@@ -11,4 +11,3 @@ __pycache__/
 Thumbs.db
 .privacy-markers.local.txt
 *.log
-apps/web/.openai/

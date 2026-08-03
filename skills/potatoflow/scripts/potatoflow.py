@@ -426,6 +426,7 @@ def command_import_plan(args: argparse.Namespace) -> dict[str, Any]:
             "source_file_ids": [],
             "status": "scheduled" if scheduled_date else "backlog",
             "paused": False,
+            "result_report": "",
             "step_results": [False for _ in task_input.get("steps", [])],
             "step_reports": ["" for _ in task_input.get("steps", [])],
             "criterion_results": [

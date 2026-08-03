@@ -14,7 +14,7 @@ Create and update plans for the single-user PotatoFlow execution system.
 3. Keep unknown information blank or label it as an assumption. Do not invent personal facts.
 4. Exclude secrets, customer-confidential material, credentials, private contacts, and unrelated projects.
 5. Preserve `objective -> milestone -> task -> execution record -> review`.
-6. Derive completion from checked execution steps and acceptance criteria. Do not create a manual completed/incomplete/pending field.
+6. Treat tasks as the primary completion unit. Execution steps are checkable progress items with optional per-step notes; the task title checkbox selects or clears every step. Acceptance criteria remain read-only. Do not output completion state or execution notes in a new plan.
 7. Treat pause as independent from completion. Use `paused` only when the user explicitly pauses a task.
 8. Preview bulk creation, destructive replacement, or major rescheduling before asking the user to import it.
 9. Use the user's timezone and stated availability. Ask only when missing information would materially change the schedule.
@@ -88,9 +88,9 @@ python scripts/potatoflow.py validate-plan --input plan.json
    app retains them.
 6. Put explicitly approved removals in `deleted_task_ids`. Never imply deletion by leaving a task
    out of `tasks`.
-7. Keep unchanged step and acceptance-criterion wording exactly the same when its completion
-   evidence should remain attached. Rewording creates a new unchecked item while the prior task
-   definition is retained in revision history.
+7. Preserve task completion, step completion, per-step notes, and the task-level result report by
+   stable task ID. Step or acceptance-criterion wording may be revised without erasing task
+   execution history; retain the prior definition in revision history.
 8. Summarize additions, edits, reschedules, pauses, explicit deletions, and untouched items before
    emitting JSON.
 9. Use “合并更新已有项目”; never silently create a duplicate project.
@@ -106,7 +106,7 @@ python scripts/potatoflow.py validate-plan --input plan.json
 
 ## Review procedure
 
-1. Use checked steps, acceptance criteria, reports, and unresolved issues as evidence.
+1. Use completed tasks, task-level result reports, acceptance criteria, and unresolved issues as evidence.
 2. Separate outcomes, effort, blockers, changed assumptions, and next decisions.
 3. Do not punish incomplete work by automatically moving every task.
 4. Show schedule changes requiring confirmation, then produce an update payload only if requested.

@@ -39,7 +39,9 @@ Apply this checklist before returning an import payload or a plan-changing recom
 - Omitted tasks are described as retained, not deleted.
 - Task IDs and titles are unique; step and criterion text has no duplicates inside one task.
 - Unchanged completed steps and criteria keep exactly the same wording.
-- Completion is not represented with `manual_status`.
+- Tasks remain the primary completion unit; steps are checkable progress items with optional notes,
+  while acceptance criteria stay read-only.
+- Completion is not represented with the legacy `manual_status`.
 - Pause is independent from completion.
 - Existing execution reports and recurring occurrence results are not discarded.
 - Ordinary reports are not converted into issues.
