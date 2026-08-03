@@ -107,6 +107,8 @@ test("source keeps the app empty and local-first", async () => {
   assert.match(app, /使用所选的本机数据并同步/);
   assert.match(app, /localStorage/);
   assert.match(layout, /PotatoFlow/);
+  assert.match(layout, /width:\s*"device-width"/);
+  assert.match(layout, /viewportFit:\s*"cover"/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   assert.doesNotMatch(app, /_sites-preview|SkeletonPreview/);
   assert.match(app, /ONBOARDING_PROMPT/);

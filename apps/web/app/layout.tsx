@@ -1,10 +1,16 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
 
 const title = "PotatoFlow · 把计划变成今天能做的事";
 const description =
   "单人、自托管的项目执行系统：从项目文档到任务、日程、问题记录与复盘。";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
