@@ -1,6 +1,7 @@
 {
   "project": {
     "id": "sample-research-project",
+    "revision": 1,
     "name": "公开资料整理示例",
     "objective": "把分散的公开资料整理成可检索的主题目录",
     "success_criteria": [
@@ -15,6 +16,20 @@
     ],
     "assumptions": [
       "首轮只处理一个主题"
+    ],
+    "execution_tip_title": "今天先把目录结构跑通。",
+    "execution_tips": [
+      "先完成字段设计，再录入样例。",
+      "遇到无法归类的资料时立即记录。",
+      "没有通过样例验证前，不批量整理。"
+    ],
+    "source_file_mode": "shared",
+    "source_file_requirements": [
+      {
+        "id": "public-research-source",
+        "label": "公开资料原文",
+        "description": "两条任务共同查阅的虚构公开资料"
+      }
     ]
   },
   "tasks": [
@@ -25,6 +40,7 @@
       "title": "定义资料目录字段",
       "objective": "建立可以统一记录公开资料的字段结构",
       "why": "先统一字段可以减少后续返工",
+      "note": "先用少量虚构样例验证，不要直接批量录入。",
       "steps": [
         "列出需要记录的信息",
         "确定必填字段",
@@ -37,6 +53,8 @@
       "scheduled_date": "2026-07-28",
       "estimated_minutes": 45,
       "priority": 1,
+      "category": "work",
+      "source_file_refs": ["public-research-source"],
       "dependencies": []
     },
     {
@@ -59,9 +77,17 @@
       "scheduled_date": "2026-07-29",
       "estimated_minutes": 30,
       "priority": 2,
+      "category": "work",
+      "source_file_refs": ["public-research-source"],
       "dependencies": [
         "define-catalog"
       ]
     }
-  ]
+  ],
+  "deleted_task_ids": [],
+  "import_metadata": {
+    "base_project_id": "sample-research-project",
+    "base_project_revision": 1,
+    "generated_at": "2026-07-28T09:00:00+08:00"
+  }
 }

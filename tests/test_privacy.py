@@ -5,18 +5,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED_PARTS = {".git", ".build-deps", "node_modules", "__pycache__", ".next"}
 
-# These markers represent private project context that must never ship in the
-# reusable open-source repository. Keep this list local to the repository.
+# Keep real private markers in the ignored `.privacy-markers.local.txt`, one
+# per line. The public test ships only neutral leak sentinels.
 PRIVATE_MARKERS = (
-    "WAKA",
-    "女包",
-    "小红书",
-    "云艺",
-    "150 个",
-    "150个",
-    "库存盘点",
-    "土豆丝",
+    "REPLACE_WITH_PRIVATE_BRAND",
+    "REPLACE_WITH_PRIVATE_ACCOUNT",
+    "REPLACE_WITH_PRIVATE_PATH",
 )
+LOCAL_MARKERS_FILE = ROOT / ".privacy-markers.local.txt"
+if LOCAL_MARKERS_FILE.exists():
+    PRIVATE_MARKERS += tuple(
+        line.strip()
+        for line in LOCAL_MARKERS_FILE.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    )
 
 
 class RepositoryPrivacyTests(unittest.TestCase):
@@ -38,13 +40,15 @@ class RepositoryPrivacyTests(unittest.TestCase):
         for path in ROOT.rglob("*"):
             if not path.is_file():
                 continue
+            if path.resolve() == Path(__file__).resolve():
+                continue
             if any(part in EXCLUDED_PARTS for part in path.parts):
                 continue
             if path.suffix.lower() not in text_suffixes:
                 continue
             content = path.read_text(encoding="utf-8")
             for marker in PRIVATE_MARKERS:
-                if marker in content and path != Path(__file__):
+                if marker in content:
                     violations.append(f"{path.relative_to(ROOT)}: {marker}")
         self.assertEqual(violations, [], "\n".join(violations))
 

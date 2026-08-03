@@ -33,6 +33,9 @@ Project
 ```
 
 A milestone describes a result. A task describes an action that one person can finish and verify.
+The milestone is a non-checkable group heading. The task is the primary completion unit.
+Task steps are checkable implementation guidance with optional notes and must not be expanded into
+one task per operation unless an operation independently produces a meaningful, verifiable outcome.
 
 Avoid copying document headings directly when they are only subject areas such as "marketing" or "AI". Rewrite them as outcomes such as "complete the first content test and collect comparable data".
 

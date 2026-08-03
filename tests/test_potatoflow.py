@@ -45,6 +45,35 @@ class PotatoFlowTests(unittest.TestCase):
         self.assertTrue(result["valid"])
         self.assertEqual(result["task_count"], 2)
 
+    def test_source_file_relationships_are_validated(self):
+        plan = json.loads(self.plan.read_text(encoding="utf-8"))
+        self.assertTrue(potatoflow.validate_plan(plan)["valid"])
+
+        plan["tasks"][0]["source_file_refs"] = ["missing-source"]
+        with self.assertRaises(potatoflow.PotatoFlowError):
+            potatoflow.validate_plan(plan)
+
+    def test_task_note_is_validated_and_imported(self):
+        plan = json.loads(self.plan.read_text(encoding="utf-8"))
+        self.assertIn("note", plan["tasks"][0])
+        result = self.import_example()
+        stored = json.loads(self.data.read_text(encoding="utf-8"))
+        task = next(
+            item
+            for item in stored["tasks"]
+            if item["id"] == result["next_task"]["id"]
+        )
+        self.assertEqual(task["note"], plan["tasks"][0]["note"])
+
+        plan["tasks"][0]["note"] = ["备注不能是数组"]
+        with self.assertRaises(potatoflow.PotatoFlowError):
+            potatoflow.validate_plan(plan)
+
+        plan = json.loads(self.plan.read_text(encoding="utf-8"))
+        plan["project"]["source_file_mode"] = "automatic-upload"
+        with self.assertRaises(potatoflow.PotatoFlowError):
+            potatoflow.validate_plan(plan)
+
     def test_skill_metadata_is_utf8(self):
         metadata = (
             ROOT / "skills" / "potatoflow" / "agents" / "openai.yaml"
@@ -60,6 +89,7 @@ class PotatoFlowTests(unittest.TestCase):
         )
         self.assertEqual(len(today["tasks"]), 1)
         self.assertEqual(today["tasks"][0]["id"], "task-define-catalog")
+        self.assertEqual(today["tasks"][0]["result_report"], "")
 
     def test_issue_and_context(self):
         self.import_example()
@@ -111,6 +141,23 @@ class PotatoFlowTests(unittest.TestCase):
     def test_rejects_unknown_dependency(self):
         plan = json.loads(self.plan.read_text(encoding="utf-8"))
         plan["tasks"][0]["dependencies"] = ["missing"]
+        with self.assertRaises(potatoflow.PotatoFlowError):
+            potatoflow.validate_plan(plan)
+
+    def test_rejects_duplicate_steps_and_deletion_overlap(self):
+        plan = json.loads(self.plan.read_text(encoding="utf-8"))
+        plan["tasks"][0]["steps"].append(plan["tasks"][0]["steps"][0])
+        with self.assertRaises(potatoflow.PotatoFlowError):
+            potatoflow.validate_plan(plan)
+
+        plan = json.loads(self.plan.read_text(encoding="utf-8"))
+        plan["deleted_task_ids"] = ["task-define-catalog"]
+        with self.assertRaises(potatoflow.PotatoFlowError):
+            potatoflow.validate_plan(plan)
+
+    def test_rejects_invalid_base_revision(self):
+        plan = json.loads(self.plan.read_text(encoding="utf-8"))
+        plan["import_metadata"]["base_project_revision"] = 0
         with self.assertRaises(potatoflow.PotatoFlowError):
             potatoflow.validate_plan(plan)
 
