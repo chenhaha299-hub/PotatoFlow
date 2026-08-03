@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import LogicGraphPrototype from "./LogicGraphPrototype";
+import LogicGraphPrototype, {
+  INITIAL_LOGIC_GRAPH_PAGES,
+  type GraphPage,
+} from "./LogicGraphPrototype";
 import styles from "./potatoflow.module.css";
 
 type ProjectInput = {
@@ -166,6 +169,7 @@ type Store = {
   projects: Project[];
   tasks: Task[];
   issues: Issue[];
+  logic_graph_pages?: GraphPage[];
   export_meta?: {
     exported_at: string;
     scope: "task" | "project" | "all";
@@ -295,6 +299,7 @@ const EMPTY_STORE: Store = {
   projects: [],
   tasks: [],
   issues: [],
+  logic_graph_pages: INITIAL_LOGIC_GRAPH_PAGES,
 };
 
 function isStore(value: unknown): value is Store {
@@ -304,7 +309,8 @@ function isStore(value: unknown): value is Store {
     store.schema_version === 1 &&
     Array.isArray(store.projects) &&
     Array.isArray(store.tasks) &&
-    Array.isArray(store.issues)
+    Array.isArray(store.issues) &&
+    (store.logic_graph_pages === undefined || Array.isArray(store.logic_graph_pages))
   );
 }
 
@@ -325,6 +331,7 @@ function readStoredData() {
         );
         return {
           ...parsed,
+          logic_graph_pages: parsed.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
           projects: parsed.projects.map((project) => ({
             ...project,
             revision: project.revision || 1,
@@ -481,7 +488,10 @@ function storeHasContent(value: Store) {
   return (
     value.projects.length > 0 ||
     value.tasks.length > 0 ||
-    value.issues.length > 0
+    value.issues.length > 0 ||
+    (value.logic_graph_pages || []).some(
+      (page) => page.id !== "inbox" || page.nodes.length > 0 || page.edges.length > 0,
+    )
   );
 }
 
@@ -506,6 +516,7 @@ const UNORDERED_SYNC_ARRAYS = new Set([
   "issues",
   "source_files",
   "source_file_ids",
+  "logic_graph_pages",
 ]);
 
 const POSITIONAL_BOOLEAN_ARRAYS = new Set([
@@ -2944,6 +2955,12 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       const restored: Store = {
         ...backup,
         export_meta: undefined,
+        logic_graph_pages: (backup.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES).map(
+          (page) => ({
+            ...page,
+            nodes: page.nodes.map((node) => ({ ...node, sourceFiles: [] })),
+          }),
+        ),
         projects: backup.projects.map((project) => ({
           ...project,
           source_files: [],
@@ -3979,7 +3996,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             </h1>
           </div>
           {activeTab === "logic-graph" ? (
-            <span className={styles.prototypeStatus}>交互原型 · 暂不保存</span>
+            <span className={styles.prototypeStatus}>
+              {syncEnabled ? "自动保存 · 跨设备同步" : "自动保存 · 当前设备"}
+            </span>
           ) : activeTab === "today" || activeTab === "projects" ? (
             <div className={styles.topActions}>
               <button
@@ -4448,7 +4467,20 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
           </section>
         )}
 
-        {activeTab === "logic-graph" && <LogicGraphPrototype />}
+        {activeTab === "logic-graph" && (
+          <LogicGraphPrototype
+            pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
+            syncEnabled={syncEnabled}
+            onPagesChange={(updater) =>
+              updateStore((current) => ({
+                ...current,
+                logic_graph_pages: updater(
+                  current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
+                ),
+              }))
+            }
+          />
+        )}
 
         {activeTab === "issues" && (
           <section>

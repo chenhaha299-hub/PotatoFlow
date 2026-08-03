@@ -4704,21 +4704,56 @@
 }
 
 .logicPageCard {
-  display: grid;
+  position: relative;
   min-height: 172px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
   border: 1px solid var(--line);
   border-radius: 24px;
   background:
     radial-gradient(circle at 87% 15%, rgba(223, 243, 92, 0.2), transparent 120px),
     white;
-  padding: 24px;
   color: var(--ink);
   text-align: left;
   box-shadow: 0 14px 45px rgba(35, 48, 38, 0.055);
   transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.logicPageOpen {
+  display: grid;
+  width: 100%;
+  min-height: 170px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 24px;
+  text-align: left;
+}
+
+.logicPageDelete {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 13px;
+  border: 0;
+  background: transparent;
+  color: #a75840;
+  padding: 5px 7px;
+  font-size: 12px;
+  font-weight: 800;
+  opacity: 0;
+  transition: opacity 160ms ease, background 160ms ease;
+}
+
+.logicPageCard:hover .logicPageDelete,
+.logicPageDelete:focus-visible {
+  opacity: 1;
+}
+
+.logicPageDelete:hover {
+  border-radius: 8px;
+  background: #fff2ed;
 }
 
 .logicPageCard:hover {
@@ -5334,27 +5369,31 @@
   font-weight: 950;
 }
 
-.logicNodeFileList a {
+.logicFileOpen {
   display: grid;
+  width: 100%;
   min-width: 0;
   gap: 2px;
+  border: 0;
+  background: transparent;
   color: var(--ink);
-  text-decoration: none;
+  padding: 0;
+  text-align: left;
 }
 
-.logicNodeFileList a strong {
+.logicFileOpen strong {
   overflow: hidden;
   font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.logicNodeFileList a small {
+.logicFileOpen small {
   color: var(--muted);
   font-size: 10px;
 }
 
-.logicNodeFileList article > button {
+.logicNodeFileList article > button:last-child {
   width: 28px;
   height: 28px;
   border: 0;
@@ -5362,6 +5401,24 @@
   background: #fbf2ed;
   color: #a65339;
   font-size: 17px;
+}
+
+.logicFileError,
+.logicDeleteWarning {
+  margin: 0;
+  color: #a94f35 !important;
+  font-size: 13px !important;
+  line-height: 1.6;
+}
+
+.dangerButton {
+  min-height: 44px;
+  border: 1px solid #d9785b;
+  border-radius: 13px;
+  background: #b95134;
+  color: white;
+  padding: 0 17px;
+  font-weight: 900;
 }
 
 .logicChildButton {
@@ -5428,6 +5485,7 @@
 }
 
 .logicInspector input,
+.logicInspector textarea,
 .logicDialog input,
 .logicDialog textarea {
   width: 100%;
@@ -5439,12 +5497,14 @@
   outline: none;
 }
 
+.logicInspector textarea,
 .logicDialog textarea {
   min-height: 112px;
   resize: vertical;
 }
 
 .logicInspector input:focus,
+.logicInspector textarea:focus,
 .logicDialog input:focus,
 .logicDialog textarea:focus {
   border-color: var(--green);
@@ -5892,9 +5952,19 @@
 
   .logicPageCard {
     min-height: 134px;
-    gap: 13px;
     border-radius: 20px;
+  }
+
+  .logicPageOpen {
+    min-height: 132px;
+    gap: 13px;
     padding: 18px;
+  }
+
+  .logicPageDelete {
+    top: 7px;
+    right: 8px;
+    opacity: 1;
   }
 
   .logicPageIndex {

@@ -9,7 +9,7 @@ import {
 } from "react";
 import styles from "./potatoflow.module.css";
 
-type IdeaNode = {
+export type IdeaNode = {
   id: string;
   label: string;
   content: string;
@@ -20,15 +20,15 @@ type IdeaNode = {
   fresh?: boolean;
 };
 
-type IdeaSourceFile = {
+export type IdeaSourceFile = {
   id: string;
   name: string;
   type: string;
   size: number;
-  url: string;
+  uploadedAt: string;
 };
 
-type IdeaEdge = {
+export type IdeaEdge = {
   id: string;
   source: string;
   target: string;
@@ -37,7 +37,7 @@ type IdeaEdge = {
   fresh?: boolean;
 };
 
-type GraphPage = {
+export type GraphPage = {
   id: string;
   title: string;
   level: 1 | 2 | 3;
@@ -50,7 +50,7 @@ type GraphPage = {
 
 type Viewport = { x: number; y: number; scale: number };
 
-const DEMO_PAGES: GraphPage[] = [
+export const INITIAL_LOGIC_GRAPH_PAGES: GraphPage[] = [
   {
     id: "inbox",
     title: "灵感收集",
@@ -58,62 +58,6 @@ const DEMO_PAGES: GraphPage[] = [
     nodes: [],
     edges: [],
     updatedLabel: "等待第一个想法",
-  },
-  {
-    id: "demo",
-    title: "交互演示",
-    level: 1,
-    updatedLabel: "6 个圆点 · 4 条连接",
-    nodes: [
-      { id: "n1", label: "灵感捕捉", content: "随手记录突然出现的想法。", x: 180, y: 380 },
-      { id: "n2", label: "内容方向", content: "从多个想法中逐渐发现共同方向。", x: 390, y: 300 },
-      { id: "n3", label: "工具教程", content: "可以继续讨论的知识内容方向。", x: 620, y: 190 },
-      { id: "n4", label: "表达方法", content: "尝试找到更准确的表达方式。", x: 650, y: 430, childPageId: "demo-expression" },
-      { id: "n5", label: "案例分享", content: "用真实实践补充抽象想法。", x: 890, y: 330 },
-      { id: "n6", label: "持续更新", content: "把成熟想法转为后续计划。", x: 1010, y: 170 },
-    ],
-    edges: [
-      { id: "e1", source: "n1", target: "n2" },
-      { id: "e2", source: "n2", target: "n3", label: "延伸" },
-      { id: "e3", source: "n2", target: "n4" },
-      { id: "e4", source: "n4", target: "n5", label: "形成" },
-    ],
-  },
-  {
-    id: "demo-expression",
-    title: "表达方法",
-    level: 2,
-    parentPageId: "demo",
-    parentNodeId: "n4",
-    updatedLabel: "4 个猜想 · 3 条连接",
-    nodes: [
-      { id: "c1", label: "动效术语", content: "收集常见的界面动效术语。", x: 250, y: 360 },
-      { id: "c2", label: "描述困难", content: "不知道如何把脑中的动效准确说出来。", x: 500, y: 260, childPageId: "demo-description" },
-      { id: "c3", label: "案例拆解", content: "从真实案例中拆解表达方式。", x: 750, y: 390 },
-      { id: "c4", label: "提示结构", content: "整理可以复用的描述顺序。", x: 920, y: 220 },
-    ],
-    edges: [
-      { id: "ce1", source: "c1", target: "c2" },
-      { id: "ce2", source: "c2", target: "c3", label: "验证" },
-      { id: "ce3", source: "c3", target: "c4", label: "提炼" },
-    ],
-  },
-  {
-    id: "demo-description",
-    title: "描述困难",
-    level: 3,
-    parentPageId: "demo-expression",
-    parentNodeId: "c2",
-    updatedLabel: "3 个具体猜想 · 最深层级",
-    nodes: [
-      { id: "g1", label: "缓动曲线", content: "动效速度变化可能需要用缓动曲线描述。", x: 310, y: 330 },
-      { id: "g2", label: "运动路径", content: "除了起点终点，还需要说明运动经过哪里。", x: 610, y: 230 },
-      { id: "g3", label: "反馈节奏", content: "尝试记录点击、等待和反馈之间的节奏。", x: 820, y: 410 },
-    ],
-    edges: [
-      { id: "ge1", source: "g1", target: "g2" },
-      { id: "ge2", source: "g2", target: "g3" },
-    ],
   },
 ];
 
@@ -132,8 +76,88 @@ function formatFileSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export default function LogicGraphPrototype() {
-  const [pages, setPages] = useState<GraphPage[]>(DEMO_PAGES);
+const GRAPH_FILE_DB_NAME = "potatoflow-files";
+const GRAPH_FILE_STORE_NAME = "source-files";
+
+function openGraphFileDatabase() {
+  return new Promise<IDBDatabase>((resolve, reject) => {
+    const request = indexedDB.open(GRAPH_FILE_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(GRAPH_FILE_STORE_NAME)) {
+        request.result.createObjectStore(GRAPH_FILE_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function saveGraphFile(id: string, file: File) {
+  const database = await openGraphFileDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(GRAPH_FILE_STORE_NAME, "readwrite");
+    transaction.objectStore(GRAPH_FILE_STORE_NAME).put(file, id);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function readGraphFile(id: string) {
+  const database = await openGraphFileDatabase();
+  const file = await new Promise<Blob | undefined>((resolve, reject) => {
+    const transaction = database.transaction(GRAPH_FILE_STORE_NAME, "readonly");
+    const request = transaction.objectStore(GRAPH_FILE_STORE_NAME).get(id);
+    request.onsuccess = () => resolve(request.result as Blob | undefined);
+    request.onerror = () => reject(request.error);
+  });
+  database.close();
+  return file;
+}
+
+async function removeGraphFile(id: string) {
+  const database = await openGraphFileDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(GRAPH_FILE_STORE_NAME, "readwrite");
+    transaction.objectStore(GRAPH_FILE_STORE_NAME).delete(id);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  database.close();
+}
+
+async function uploadGraphFileToCloud(id: string, file: File) {
+  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      "X-File-Name": encodeURIComponent(file.name),
+    },
+    body: file,
+  });
+  if (!response.ok) {
+    const data = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(data?.error || "文件暂时无法上传到云端。");
+  }
+}
+
+async function readGraphFileFromCloud(id: string) {
+  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, { cache: "no-store" });
+  return response.ok ? response.blob() : undefined;
+}
+
+async function removeGraphFileFromCloud(id: string) {
+  await fetch(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
+type LogicGraphProps = {
+  pages: GraphPage[];
+  onPagesChange: (updater: (current: GraphPage[]) => GraphPage[]) => void;
+  syncEnabled: boolean;
+};
+
+export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled }: LogicGraphProps) {
+  const setPages = onPagesChange;
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
@@ -146,6 +170,10 @@ export default function LogicGraphPrototype() {
   const [newPageOpen, setNewPageOpen] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [deletePageId, setDeletePageId] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [fileBusy, setFileBusy] = useState(false);
+  const [fileError, setFileError] = useState("");
   const [transitionState, setTransitionState] = useState<"deeper" | "back" | "arrive" | null>(null);
   const [pageViewports, setPageViewports] = useState<Record<string, Viewport>>({});
 
@@ -305,6 +333,30 @@ export default function LogicGraphPrototype() {
     openPage(id);
   }
 
+  function requestDeletePage(pageId: string) {
+    setDeletePageId(pageId);
+    setDeleteConfirmText("");
+  }
+
+  async function confirmDeletePage() {
+    if (!deletePageId || deleteConfirmText.trim() !== "确认") return;
+    const deletingIds = descendantPageIds(deletePageId);
+    const fileIds = pages
+      .filter((page) => deletingIds.has(page.id))
+      .flatMap((page) => page.nodes)
+      .flatMap((node) => node.sourceFiles || [])
+      .map((file) => file.id);
+    setPages((current) => current.filter((page) => !deletingIds.has(page.id)));
+    setDeletePageId(null);
+    setDeleteConfirmText("");
+    await Promise.allSettled(
+      fileIds.flatMap((id) => [
+        removeGraphFile(id),
+        ...(syncEnabled ? [removeGraphFileFromCloud(id)] : []),
+      ]),
+    );
+  }
+
   function createOrOpenChildGraph() {
     if (!activePage || !selectedNode) return;
     if (selectedChildPage) {
@@ -435,7 +487,18 @@ export default function LogicGraphPrototype() {
     setSelectedNodeId(nodeId);
   }
 
-  function deleteSelectedNode() {
+  function updateSelectedNode(fields: Partial<Pick<IdeaNode, "label" | "content">>) {
+    if (!selectedNodeId) return;
+    updateActivePage((page) => ({
+      ...page,
+      nodes: page.nodes.map((node) =>
+        node.id === selectedNodeId ? { ...node, ...fields } : node,
+      ),
+      updatedLabel: "刚刚更新",
+    }));
+  }
+
+  async function deleteSelectedNode() {
     if (!selectedNodeId) return;
     const childIds = selectedNode?.childPageId
       ? descendantPageIds(selectedNode.childPageId)
@@ -446,6 +509,10 @@ export default function LogicGraphPrototype() {
     ) {
       return;
     }
+    const fileIds = [selectedNode, ...pages.filter((page) => childIds.has(page.id)).flatMap((page) => page.nodes)]
+      .filter((node): node is IdeaNode => Boolean(node))
+      .flatMap((node) => node.sourceFiles || [])
+      .map((file) => file.id);
     if (childIds.size > 0) {
       setPages((current) => current.filter((page) => !childIds.has(page.id)));
     }
@@ -459,44 +526,89 @@ export default function LogicGraphPrototype() {
     }));
     setSelectedNodeId(null);
     setConnectSourceId(null);
+    await Promise.allSettled(
+      fileIds.flatMap((id) => [
+        removeGraphFile(id),
+        ...(syncEnabled ? [removeGraphFileFromCloud(id)] : []),
+      ]),
+    );
   }
 
-  function attachFilesToSelectedNode(fileList: FileList | null) {
+  async function attachFilesToSelectedNode(fileList: FileList | null) {
     if (!selectedNodeId || !fileList?.length) return;
+    setFileError("");
     const accepted = Array.from(fileList).filter((file) => {
       const extension = file.name.split(".").pop()?.toLowerCase();
-      return ["pdf", "doc", "docx"].includes(extension || "");
+      return ["pdf", "docx", "txt", "md"].includes(extension || "");
     });
     if (!accepted.length) {
-      window.alert("当前原型支持 PDF、Word（.doc/.docx）文件。");
+      setFileError("当前支持 PDF、DOCX、TXT 和 Markdown 文件。");
       return;
     }
     const oversized = accepted.find((file) => file.size > 20 * 1024 * 1024);
     if (oversized) {
-      window.alert(`“${oversized.name}”超过 20MB，原型阶段暂不加入。`);
+      setFileError(`“${oversized.name}”超过 20MB，无法添加。`);
       return;
     }
-    updateActivePage((page) => ({
-      ...page,
-      nodes: page.nodes.map((node) => {
-        if (node.id !== selectedNodeId) return node;
-        const existing = node.sourceFiles || [];
-        const additions = accepted
-          .filter((file) => !existing.some((item) => item.name === file.name && item.size === file.size))
-          .map((file) => ({
-            id: uid("source"),
-            name: file.name,
-            type: file.name.split(".").pop()?.toUpperCase() || "FILE",
-            size: file.size,
-            url: URL.createObjectURL(file),
-          }));
-        return { ...node, sourceFiles: [...existing, ...additions] };
-      }),
-      updatedLabel: "刚刚更新",
-    }));
+    const existing = selectedNode?.sourceFiles || [];
+    const uniqueFiles = accepted.filter(
+      (file) => !existing.some((item) => item.name === file.name && item.size === file.size),
+    );
+    if (!uniqueFiles.length) return;
+    try {
+      setFileBusy(true);
+      const additions: IdeaSourceFile[] = [];
+      for (const file of uniqueFiles) {
+        const metadata: IdeaSourceFile = {
+          id: `source-${crypto.randomUUID()}`,
+          name: file.name,
+          type: file.name.split(".").pop()?.toUpperCase() || "FILE",
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+        };
+        await saveGraphFile(metadata.id, file);
+        if (syncEnabled) await uploadGraphFileToCloud(metadata.id, file);
+        additions.push(metadata);
+      }
+      updateActivePage((page) => ({
+        ...page,
+        nodes: page.nodes.map((node) =>
+          node.id === selectedNodeId
+            ? { ...node, sourceFiles: [...(node.sourceFiles || []), ...additions] }
+            : node,
+        ),
+        updatedLabel: "刚刚更新",
+      }));
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : "文件保存失败，请重试。");
+    } finally {
+      setFileBusy(false);
+    }
   }
 
-  function removeSourceFile(fileId: string) {
+  async function openSourceFile(file: IdeaSourceFile) {
+    setFileError("");
+    try {
+      setFileBusy(true);
+      let blob = await readGraphFile(file.id);
+      if (!blob && syncEnabled) {
+        blob = await readGraphFileFromCloud(file.id);
+        if (blob) {
+          await saveGraphFile(file.id, new File([blob], file.name, { type: blob.type }));
+        }
+      }
+      if (!blob) throw new Error("没有找到文件内容，可能尚未同步到当前设备。");
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank", "noopener,noreferrer");
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      setFileError(error instanceof Error ? error.message : "暂时无法打开文件。");
+    } finally {
+      setFileBusy(false);
+    }
+  }
+
+  async function removeSourceFile(fileId: string) {
     if (!selectedNodeId) return;
     updateActivePage((page) => ({
       ...page,
@@ -507,6 +619,10 @@ export default function LogicGraphPrototype() {
       ),
       updatedLabel: "刚刚更新",
     }));
+    await Promise.allSettled([
+      removeGraphFile(fileId),
+      ...(syncEnabled ? [removeGraphFileFromCloud(fileId)] : []),
+    ]);
   }
 
   function updateSelectedEdge(label: string, directed: boolean) {
@@ -701,14 +817,6 @@ export default function LogicGraphPrototype() {
     }
     return (
       <section className={styles.logicNotebook}>
-        <div className={styles.prototypeNotice}>
-          <span>交互原型</span>
-          <div>
-            <strong>先验证手感，再接入正式数据</strong>
-            <p>这里的演示内容不会进入项目或云同步，刷新网页后会恢复初始状态。</p>
-          </div>
-        </div>
-
         <header className={styles.logicNotebookHeader}>
           <div>
             <p className={styles.eyebrow}>IDEA NOTEBOOK</p>
@@ -723,20 +831,29 @@ export default function LogicGraphPrototype() {
 
         <div className={styles.logicPageGrid}>
           {pageStats.map((page, index) => (
-            <button className={styles.logicPageCard} key={page.id} onClick={() => openPage(page.id)}>
-              <span className={styles.logicPageIndex}>{String(index + 1).padStart(2, "0")}</span>
-              <div>
-                <small>{page.id === "inbox" ? "快速捕捉入口" : "独立网图页面"}</small>
-                <h3>{page.title}</h3>
-                <p>
-                  {page.stat}
-                  {pages.some((candidate) => candidate.parentPageId === page.id)
-                    ? ` · 含 ${pages.filter((candidate) => candidate.parentPageId === page.id).length} 个子网图`
-                    : ""}
-                </p>
-              </div>
-              <span className={styles.logicPageArrow}>→</span>
-            </button>
+            <article className={styles.logicPageCard} key={page.id}>
+              <button className={styles.logicPageOpen} onClick={() => openPage(page.id)}>
+                <span className={styles.logicPageIndex}>{String(index + 1).padStart(2, "0")}</span>
+                <div>
+                  <small>{page.id === "inbox" ? "快速捕捉入口" : "独立网图页面"}</small>
+                  <h3>{page.title}</h3>
+                  <p>
+                    {page.stat}
+                    {pages.some((candidate) => candidate.parentPageId === page.id)
+                      ? ` · 含 ${pages.filter((candidate) => candidate.parentPageId === page.id).length} 个子网图`
+                      : ""}
+                  </p>
+                </div>
+                <span className={styles.logicPageArrow}>→</span>
+              </button>
+              <button
+                className={styles.logicPageDelete}
+                onClick={() => requestDeletePage(page.id)}
+                aria-label={`删除${page.title}`}
+              >
+                删除
+              </button>
+            </article>
           ))}
         </div>
 
@@ -752,6 +869,24 @@ export default function LogicGraphPrototype() {
               <div className={styles.logicDialogActions}>
                 <button className={styles.quietButton} onClick={() => setNewPageOpen(false)}>取消</button>
                 <button className={styles.primaryButton} onClick={createPage} disabled={!newPageTitle.trim()}>创建页面</button>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {deletePageId && (
+          <div className={styles.logicOverlay} role="presentation" onMouseDown={() => setDeletePageId(null)}>
+            <section className={styles.logicDialog} role="dialog" aria-modal="true" aria-labelledby="delete-graph-page" onMouseDown={(event) => event.stopPropagation()}>
+              <p className={styles.eyebrow}>危险操作</p>
+              <h3 id="delete-graph-page">删除“{pages.find((page) => page.id === deletePageId)?.title}”吗？</h3>
+              <p className={styles.logicDeleteWarning}>删除后，这张网图的圆点、连线、源文件关联以及全部二、三级子网图都无法恢复。</p>
+              <label>
+                <span>请输入“确认”</span>
+                <input value={deleteConfirmText} onChange={(event) => setDeleteConfirmText(event.target.value)} placeholder="确认" autoFocus />
+              </label>
+              <div className={styles.logicDialogActions}>
+                <button className={styles.quietButton} onClick={() => setDeletePageId(null)}>取消</button>
+                <button className={styles.dangerButton} onClick={confirmDeletePage} disabled={deleteConfirmText.trim() !== "确认"}>永久删除</button>
               </div>
             </section>
           </div>
@@ -934,7 +1069,18 @@ export default function LogicGraphPrototype() {
                   <div><small>第 {activePage.level} 层想法圆点</small><h3>{selectedNode.label}</h3></div>
                   <button aria-label="关闭想法详情" onClick={() => setSelectedNodeId(null)}>×</button>
                 </div>
-                <p>{selectedNode.content}</p>
+                <label>
+                  <span>圆点关键词（最多6个字）</span>
+                  <input
+                    value={selectedNode.label}
+                    maxLength={6}
+                    onChange={(event) => updateSelectedNode({ label: Array.from(event.target.value).slice(0, 6).join("") })}
+                  />
+                </label>
+                <label>
+                  <span>完整想法</span>
+                  <textarea value={selectedNode.content} onChange={(event) => updateSelectedNode({ content: event.target.value })} />
+                </label>
                 <section className={styles.logicNodeFiles}>
                   <div className={styles.logicNodeFilesHeader}>
                     <span><strong>相关源文件</strong><small>仅关联当前圆点</small></span>
@@ -942,7 +1088,7 @@ export default function LogicGraphPrototype() {
                       ＋ 添加文件
                       <input
                         type="file"
-                        accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
                         multiple
                         onChange={(event) => {
                           attachFilesToSelectedNode(event.target.files);
@@ -956,17 +1102,18 @@ export default function LogicGraphPrototype() {
                       {(selectedNode.sourceFiles || []).map((file) => (
                         <article key={file.id}>
                           <span>{file.type}</span>
-                          <a href={file.url} target="_blank" rel="noreferrer" title={file.name}>
+                          <button className={styles.logicFileOpen} onClick={() => openSourceFile(file)} disabled={fileBusy} title={file.name}>
                             <strong>{file.name}</strong>
                             <small>{formatFileSize(file.size)}</small>
-                          </a>
+                          </button>
                           <button aria-label={`移除${file.name}`} onClick={() => removeSourceFile(file.id)}>×</button>
                         </article>
                       ))}
                     </div>
                   ) : (
-                    <p>还没有关联资料，可添加 Word 或 PDF。</p>
+                    <p>还没有关联资料，可添加 Word、PDF、TXT 或 Markdown。</p>
                   )}
+                  {fileError && <p className={styles.logicFileError}>{fileError}</p>}
                 </section>
                 {activePage.level < 3 ? (
                   <button className={styles.logicChildButton} onClick={createOrOpenChildGraph}>
@@ -1007,11 +1154,6 @@ export default function LogicGraphPrototype() {
             ) : null}
           </aside>
         )}
-      </div>
-
-      <div className={styles.logicPrototypeFooter}>
-        <span>原型模式</span>
-        圆点、位置和连接暂不写入 PotatoFlow 数据。
       </div>
 
       {composerOpen && (

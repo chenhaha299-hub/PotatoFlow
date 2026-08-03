@@ -18,7 +18,8 @@ function isPotatoFlowStore(value: unknown) {
     store.schema_version === 1 &&
     Array.isArray(store.projects) &&
     Array.isArray(store.tasks) &&
-    Array.isArray(store.issues)
+    Array.isArray(store.issues) &&
+    (store.logic_graph_pages === undefined || Array.isArray(store.logic_graph_pages))
   );
 }
 
