@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import LogicGraphPrototype from "./LogicGraphPrototype";
 import styles from "./potatoflow.module.css";
 
 type ProjectInput = {
@@ -281,7 +282,7 @@ type CustomTaskDraft = {
   priority: number;
 };
 
-type TabId = "today" | "calendar" | "projects" | "issues";
+type TabId = "today" | "calendar" | "projects" | "issues" | "logic-graph";
 
 const STORAGE_KEY = "potatoflow:v1";
 const STORAGE_BACKUP_KEY = "potatoflow:v1:backup";
@@ -767,11 +768,12 @@ async function deleteCloudSourceFile(id: string) {
   await fetch(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
-const NAV_ITEMS: Array<{ id: TabId; label: string; mark: string }> = [
+const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel?: string; mark: string }> = [
   { id: "today", label: "今天", mark: "今" },
   { id: "calendar", label: "日历", mark: "日" },
   { id: "projects", label: "项目", mark: "项" },
   { id: "issues", label: "问题", mark: "问" },
+  { id: "logic-graph", label: "逻辑网图", mobileLabel: "网图", mark: "网" },
 ];
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -860,6 +862,20 @@ function fileSizeLabel(bytes: number) {
 function localDate(date = new Date()) {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function shiftDateValue(value: string, offsetDays: number) {
+  const date = new Date(`${value}T12:00:00`);
+  date.setDate(date.getDate() + offsetDays);
+  return localDate(date);
+}
+
+function dateDistance(from: string, to: string) {
+  return Math.round(
+    (new Date(`${to}T12:00:00`).getTime() -
+      new Date(`${from}T12:00:00`).getTime()) /
+      86400000,
+  );
 }
 
 function makeId(prefix: string, value: string) {
@@ -1273,6 +1289,13 @@ export default function PotatoFlowApp({
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<
     string | null
   >(null);
+  const [calendarMoveNotice, setCalendarMoveNotice] = useState<{
+    taskId: string;
+    taskTitle: string;
+    targetDate: string;
+    previousScheduledDate: string | null;
+    previousEndDate: string | null;
+  } | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDate, setSelectedTaskDate] = useState<string | null>(
     null,
@@ -1607,6 +1630,76 @@ export default function PotatoFlowApp({
     });
   }
 
+  function moveTaskFromCalendar(
+    taskId: string,
+    occurrenceDate: string,
+    targetDate: string,
+  ) {
+    if (!targetDate || targetDate === occurrenceDate) return;
+    const storedTask = store.tasks.find((task) => task.id === taskId);
+    if (!storedTask) return;
+    const offsetDays = dateDistance(occurrenceDate, targetDate);
+    updateStore((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) => {
+        if (task.id !== taskId) return task;
+        const nextStart = task.scheduled_date
+          ? shiftDateValue(task.scheduled_date, offsetDays)
+          : targetDate;
+        return {
+          ...task,
+          scheduled_date: nextStart,
+          end_date: task.end_date
+            ? shiftDateValue(task.end_date, offsetDays)
+            : null,
+          status: task.status === "backlog" ? "scheduled" : task.status,
+          revision: (task.revision || 1) + 1,
+          updated_at: new Date().toISOString(),
+        };
+      }),
+    }));
+    setCalendarMoveNotice({
+      taskId: storedTask.id,
+      taskTitle: storedTask.title,
+      targetDate,
+      previousScheduledDate: storedTask.scheduled_date,
+      previousEndDate: storedTask.end_date,
+    });
+  }
+
+  function undoCalendarMove() {
+    if (!calendarMoveNotice) return;
+    const notice = calendarMoveNotice;
+    updateStore((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) =>
+        task.id === notice.taskId
+          ? {
+              ...task,
+              scheduled_date: notice.previousScheduledDate,
+              end_date: notice.previousEndDate,
+              revision: (task.revision || 1) + 1,
+              updated_at: new Date().toISOString(),
+            }
+          : task,
+      ),
+    }));
+    setCalendarMoveNotice(null);
+  }
+
+  function createTaskForCalendarDate(dateValue: string) {
+    setCustomTaskDraft((current) => ({
+      ...current,
+      scheduleType: "once",
+      startDate: dateValue,
+      endDate: dateValue,
+    }));
+    setImportMode("task");
+    setImportOpen(true);
+    setSelectedCalendarDate(null);
+    setCalendarMoveNotice(null);
+  }
+
   const storedSelectedTask = store.tasks.find(
     (task) => task.id === selectedTaskId,
   );
@@ -1841,6 +1934,12 @@ export default function PotatoFlowApp({
   function openTask(taskId: string, occurrenceDate?: string | null) {
     setSelectedTaskDate(occurrenceDate || null);
     setSelectedTaskId(taskId);
+  }
+
+  function jumpToTaskSection(section: string) {
+    taskDrawerRef.current
+      ?.querySelector<HTMLElement>(`[data-task-section="${section}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   const todayGroups = useMemo(() => {
@@ -3879,39 +3978,43 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 : NAV_ITEMS.find((item) => item.id === activeTab)?.label}
             </h1>
           </div>
-          <div className={styles.topActions}>
-            <button
-              className={`${styles.quietButton} ${styles.mobileExportButton}`}
-              onClick={() => {
-                setExportCopied(false);
-                const preferredProjectId =
-                  selectedPlanProjectId ||
-                  selectedProject?.id ||
-                  store.projects[0]?.id ||
-                  "";
-                setExportProjectId(preferredProjectId);
-                setExportTaskId(
-                  selectedTaskId ||
-                    store.tasks.find(
-                      (task) => task.project_id === preferredProjectId,
-                    )?.id ||
-                    "",
-                );
-                setExportOpen(true);
-              }}
-            >
-              导出数据
-            </button>
-            <button
-              className={styles.primaryButton}
-              onClick={() => setImportOpen(true)}
-            >
-              <span>＋</span> 导入项目
-            </button>
-          </div>
+          {activeTab === "logic-graph" ? (
+            <span className={styles.prototypeStatus}>交互原型 · 暂不保存</span>
+          ) : activeTab === "today" || activeTab === "projects" ? (
+            <div className={styles.topActions}>
+              <button
+                className={`${styles.quietButton} ${styles.mobileExportButton}`}
+                onClick={() => {
+                  setExportCopied(false);
+                  const preferredProjectId =
+                    selectedPlanProjectId ||
+                    selectedProject?.id ||
+                    store.projects[0]?.id ||
+                    "";
+                  setExportProjectId(preferredProjectId);
+                  setExportTaskId(
+                    selectedTaskId ||
+                      store.tasks.find(
+                        (task) => task.project_id === preferredProjectId,
+                      )?.id ||
+                      "",
+                  );
+                  setExportOpen(true);
+                }}
+              >
+                导出数据
+              </button>
+              <button
+                className={styles.primaryButton}
+                onClick={() => setImportOpen(true)}
+              >
+                <span>＋</span> 导入项目
+              </button>
+            </div>
+          ) : null}
         </header>
 
-        <section
+        {(activeTab === "today" || activeTab === "projects") && <section
           className={`${styles.syncBar} ${
             syncStatus === "offline" || syncStatus === "error"
               ? styles.syncBarWarning
@@ -3955,7 +4058,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               登录并开启同步
             </a>
           )}
-        </section>
+        </section>}
 
         {activeTab === "today" && (
           <section
@@ -4247,7 +4350,10 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             month={calendarMonth}
             tasks={store.tasks}
             onMonthChange={setCalendarMonth}
-            onDayOpen={setSelectedCalendarDate}
+            onDayOpen={(dateValue) => {
+              setCalendarMoveNotice(null);
+              setSelectedCalendarDate(dateValue);
+            }}
           />
         )}
 
@@ -4325,6 +4431,14 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                             </button>
                           ))
                         )}
+                        {tasks.length > 4 && (
+                          <button
+                            className={styles.projectMoreTasks}
+                            onClick={() => setSelectedPlanProjectId(project.id)}
+                          >
+                            还有 {tasks.length - 4} 项任务 · 查看全部 →
+                          </button>
+                        )}
                       </div>
                     </article>
                   );
@@ -4333,6 +4447,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             )}
           </section>
         )}
+
+        {activeTab === "logic-graph" && <LogicGraphPrototype />}
 
         {activeTab === "issues" && (
           <section>
@@ -4386,7 +4502,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             }}
           >
             <span>{item.mark}</span>
-            {item.label}
+            {item.mobileLabel || item.label}
           </button>
         ))}
       </nav>
@@ -6385,17 +6501,45 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </div>
               <button
                 aria-label="关闭当日任务清单"
-                onClick={() => setSelectedCalendarDate(null)}
+                onClick={() => {
+                  setSelectedCalendarDate(null);
+                  setCalendarMoveNotice(null);
+                }}
               >
                 ×
               </button>
             </div>
+            {calendarMoveNotice && (
+              <div className={styles.calendarMoveNotice} role="status">
+                <span>
+                  <strong>日期已修改</strong>
+                  “{compactTitle(calendarMoveNotice.taskTitle)}”已移到{dateTitle(calendarMoveNotice.targetDate)}。
+                </span>
+                <div className={styles.calendarMoveActions}>
+                  <button onClick={undoCalendarMove}>撤销</button>
+                  <button
+                    onClick={() => {
+                      setSelectedCalendarDate(calendarMoveNotice.targetDate);
+                      setCalendarMoveNotice(null);
+                    }}
+                  >
+                    查看新日期 →
+                  </button>
+                </div>
+              </div>
+            )}
             {store.tasks.filter((task) =>
               taskOccursOnDate(task, selectedCalendarDate),
             ).length === 0 ? (
               <div className={styles.dayAgendaEmpty}>
                 <strong>这一天没有安排任务</strong>
-                <span>可以返回日历选择其他日期。</span>
+                <span>可以直接为这一天创建任务，不必返回后重新选择日期。</span>
+                <button
+                  className={styles.primaryButton}
+                  onClick={() => createTaskForCalendarDate(selectedCalendarDate)}
+                >
+                  ＋ 新建该日任务
+                </button>
               </div>
             ) : (
               <>
@@ -6406,7 +6550,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       taskOccursOnDate(task, selectedCalendarDate),
                     ).length
                   }{" "}
-                  项任务，点击任务查看详情
+                  项任务，可直接修改日期；点击标题查看详情
                 </p>
                 <div className={styles.dayAgendaList}>
                   {store.tasks
@@ -6423,37 +6567,61 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       );
                       const progress = taskCompletion(task);
                       return (
-                        <button
-                          key={task.id}
-                          className={styles.dayAgendaTask}
-                          onClick={() => {
-                            setSelectedCalendarDate(null);
-                            openTask(task.id, selectedCalendarDate);
-                          }}
-                        >
-                          <span>
-                            {project?.name || "个人任务"}
-                            {task.milestone ? ` · ${task.milestone}` : ""}
-                          </span>
-                          <strong>{task.title}</strong>
-                          <div>
-                            <small>{minutesLabel(task.estimated_minutes)}</small>
-                            <small
-                              className={
-                                progress === 100
-                                  ? styles.dayAgendaDone
-                                  : undefined
-                              }
-                            >
-                              {progress === 100
-                                ? "已完成"
-                                : progress > 0
-                                  ? `完成 ${progress}%`
-                                  : TASK_LEVEL_LABELS[taskLevel(task)]}
-                            </small>
-                            <i aria-hidden="true">→</i>
+                        <article key={task.id} className={styles.dayAgendaTask}>
+                          <button
+                            className={styles.dayAgendaTaskOpen}
+                            onClick={() => {
+                              setSelectedCalendarDate(null);
+                              setCalendarMoveNotice(null);
+                              openTask(task.id, selectedCalendarDate);
+                            }}
+                          >
+                            <span>
+                              {project?.name || "个人任务"}
+                              {task.milestone ? ` · ${task.milestone}` : ""}
+                            </span>
+                            <strong>{task.title}</strong>
+                            <div>
+                              <small>{minutesLabel(task.estimated_minutes)}</small>
+                              <small
+                                className={
+                                  progress === 100
+                                    ? styles.dayAgendaDone
+                                    : undefined
+                                }
+                              >
+                                {progress === 100
+                                  ? "已完成"
+                                  : progress > 0
+                                    ? `完成 ${progress}%`
+                                    : TASK_LEVEL_LABELS[taskLevel(task)]}
+                              </small>
+                              <i aria-hidden="true">查看详情 →</i>
+                            </div>
+                          </button>
+                          <div className={styles.dayAgendaQuickDate}>
+                            <label>
+                              <span>修改日期</span>
+                              <input
+                                type="date"
+                                value={selectedCalendarDate}
+                                aria-label={`修改“${task.title}”的日期`}
+                                onChange={(event) =>
+                                  moveTaskFromCalendar(
+                                    storedTask.id,
+                                    selectedCalendarDate,
+                                    event.target.value,
+                                  )
+                                }
+                              />
+                            </label>
+                            {storedTask.end_date && (
+                              <small>
+                                {storedTask.recurrence ? "将同步移动整个周期" : "将同步移动日期范围"}
+                              </small>
+                            )}
                           </div>
-                        </button>
+                        </article>
                       );
                     })}
                 </div>
@@ -6557,7 +6725,17 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               )}
             </div>
 
+            <nav className={styles.taskSectionNav} aria-label="任务内容快速导航">
+              <span>快速到达</span>
+              <button onClick={() => jumpToTaskSection("progress")}>进度</button>
+              <button onClick={() => jumpToTaskSection("files")}>文件</button>
+              <button onClick={() => jumpToTaskSection("steps")}>步骤</button>
+              <button onClick={() => jumpToTaskSection("report")}>汇报</button>
+              <button onClick={() => jumpToTaskSection("issue")}>问题</button>
+            </nav>
+
             <section
+              data-task-section="progress"
               className={`${styles.taskProgressPanel} ${
                 selectedTaskProgress === 100
                   ? styles.taskProgressComplete
@@ -6678,7 +6856,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </div>
             </section>
 
-            <section className={styles.taskSourceFilesPanel}>
+            <section className={styles.taskSourceFilesPanel} data-task-section="files">
               <div>
                 <p className={styles.eyebrow}>相关源文件</p>
                 <h3>执行这条任务时需要查看的资料</h3>
@@ -6719,6 +6897,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               label="行动路径"
               title="执行步骤"
               variant="steps"
+              sectionKey="steps"
             >
               {selectedTask.steps?.length ? (
                 <ol className={styles.stepList}>
@@ -6804,7 +6983,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </ul>
             </DetailBlock>
 
-            <section className={styles.taskReportPanel}>
+            <section className={styles.taskReportPanel} data-task-section="report">
               <div>
                 <p className={styles.eyebrow}>任务完成情况</p>
                 <h3>统一记录本任务的结果</h3>
@@ -6837,7 +7016,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               />
             </section>
 
-            <div className={styles.issueComposer}>
+            <div className={styles.issueComposer} data-task-section="issue">
               <div>
                 <p className={styles.eyebrow}>执行中遇到问题？</p>
                 <h3>只记录确实需要分析的问题</h3>
@@ -7425,12 +7604,14 @@ function DetailBlock({
   label,
   title,
   variant,
+  sectionKey,
   children,
 }: {
   number: string;
   label: string;
   title: string;
   variant: "reason" | "steps" | "criteria";
+  sectionKey?: string;
   children: React.ReactNode;
 }) {
   const variantClass =
@@ -7441,7 +7622,7 @@ function DetailBlock({
         : styles.detailCriteria;
 
   return (
-    <section className={`${styles.detailBlock} ${variantClass}`}>
+    <section className={`${styles.detailBlock} ${variantClass}`} data-task-section={sectionKey}>
       <div className={styles.detailBlockHeader}>
         <span className={styles.detailIndex}>{number}</span>
         <div>

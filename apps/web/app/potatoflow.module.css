@@ -1283,11 +1283,10 @@
 .dayAgendaTask {
   display: grid;
   width: 100%;
-  gap: 7px;
+  overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 16px;
   background: #fbfcf9;
-  padding: 16px;
   color: var(--ink);
   text-align: left;
   transition:
@@ -1297,14 +1296,29 @@
 }
 
 .dayAgendaTask:hover,
-.dayAgendaTask:focus-visible {
+.dayAgendaTask:focus-within {
   border-color: #a8c7b3;
-  outline: none;
   box-shadow: 0 10px 28px rgba(24, 38, 29, 0.08);
   transform: translateY(-1px);
 }
 
-.dayAgendaTask > span {
+.dayAgendaTaskOpen {
+  display: grid;
+  width: 100%;
+  gap: 7px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 16px;
+  text-align: left;
+}
+
+.dayAgendaTaskOpen:focus-visible {
+  outline: 2px solid rgba(31, 106, 73, 0.28);
+  outline-offset: -3px;
+}
+
+.dayAgendaTaskOpen > span {
   overflow: hidden;
   color: var(--green);
   font-size: 14px;
@@ -1313,12 +1327,12 @@
   white-space: nowrap;
 }
 
-.dayAgendaTask > strong {
+.dayAgendaTaskOpen > strong {
   font-size: 15px;
   line-height: 1.45;
 }
 
-.dayAgendaTask > div {
+.dayAgendaTaskOpen > div {
   display: flex;
   align-items: center;
   gap: 7px;
@@ -1345,6 +1359,89 @@
   font-style: normal;
 }
 
+.dayAgendaQuickDate {
+  display: flex;
+  min-height: 54px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid #e1e7de;
+  background: white;
+  padding: 9px 12px;
+}
+
+.dayAgendaQuickDate label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.dayAgendaQuickDate label span {
+  flex: 0 0 auto;
+  color: #58645a;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.dayAgendaQuickDate input {
+  min-height: 36px;
+  border: 1px solid #d4ddd1;
+  border-radius: 10px;
+  background: #f9fbf8;
+  color: var(--ink);
+  padding: 0 9px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.dayAgendaQuickDate > small {
+  color: #8a7452;
+  font-size: 11px;
+  text-align: right;
+}
+
+.calendarMoveNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0 14px;
+  border: 1px solid #c9decf;
+  border-radius: 13px;
+  background: #eff8f1;
+  color: #536258;
+  padding: 11px 12px;
+  font-size: 13px;
+}
+
+.calendarMoveNotice span {
+  min-width: 0;
+}
+
+.calendarMoveNotice strong {
+  display: block;
+  color: var(--green);
+  margin-bottom: 2px;
+}
+
+.calendarMoveNotice button {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  padding: 6px;
+  font-weight: 900;
+}
+
+.calendarMoveActions {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
 .dayAgendaEmpty {
   display: grid;
   min-height: 180px;
@@ -1357,6 +1454,11 @@
 .dayAgendaEmpty strong {
   color: var(--ink);
   font-size: 16px;
+}
+
+.dayAgendaEmpty button {
+  justify-self: center;
+  margin-top: 8px;
 }
 
 .projectGrid {
@@ -1467,6 +1569,16 @@
 .projectTasks small {
   color: var(--muted);
   font-size: 14px;
+}
+
+.projectTasks .projectMoreTasks {
+  display: block;
+  border-top-style: dashed;
+  color: var(--green);
+  padding: 12px 0 4px;
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
 }
 
 .taskDot {
@@ -3581,6 +3693,52 @@
   font-weight: 800;
 }
 
+.taskSectionNav {
+  position: sticky;
+  z-index: 12;
+  top: -1px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-x: auto;
+  margin: -12px -4px 18px;
+  border: 1px solid var(--task-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 8px;
+  box-shadow: 0 8px 22px rgba(35, 53, 40, 0.08);
+  scrollbar-width: none;
+  backdrop-filter: blur(14px);
+}
+
+.taskSectionNav::-webkit-scrollbar {
+  display: none;
+}
+
+.taskSectionNav > span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  padding: 0 4px;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.taskSectionNav button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--task-soft);
+  color: var(--task-strong);
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.taskDetailDrawer [data-task-section] {
+  scroll-margin-top: 68px;
+}
+
 .detailTaskTitle {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -4314,6 +4472,1140 @@
   background: #fffdf7;
 }
 
+.prototypeStatus {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid #d4decf;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--green);
+  padding: 0 14px;
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.logicNotebook,
+.logicGraphPrototype {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.prototypeNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  border: 1px solid #d9e4d7;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #f8fbf7, #eef6ef);
+  padding: 17px 19px;
+}
+
+.prototypeNotice > span,
+.logicPrototypeFooter span {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--ink);
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.prototypeNotice div {
+  display: grid;
+  gap: 4px;
+}
+
+.prototypeNotice strong {
+  font-size: 16px;
+}
+
+.prototypeNotice p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.logicNotebookHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 42px 4px 25px;
+}
+
+.logicNotebookHeader h2 {
+  margin: 6px 0 8px;
+  font-size: clamp(28px, 4vw, 44px);
+  letter-spacing: -0.055em;
+}
+
+.logicNotebookHeader > div > p:last-child {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.logicNotebookActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logicSummaryHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 20px 2px 26px;
+}
+
+.logicSummaryHeader h2 {
+  margin: 6px 0 8px;
+  font-size: clamp(30px, 4vw, 44px);
+  letter-spacing: -0.055em;
+}
+
+.logicSummaryHeader p:last-child {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.logicSummaryStats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.logicSummaryStats article {
+  display: grid;
+  gap: 5px;
+  border: 1px solid #dce5da;
+  border-radius: 20px;
+  background: linear-gradient(150deg, white, #f3f8f2);
+  padding: 18px;
+}
+
+.logicSummaryStats span,
+.logicSummaryStats small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.logicSummaryStats strong {
+  color: var(--green);
+  font-size: 32px;
+  line-height: 1;
+}
+
+.logicSummaryList {
+  display: grid;
+  gap: 13px;
+}
+
+.logicSummaryRow {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: white;
+  padding: 18px;
+  box-shadow: 0 12px 38px rgba(35, 48, 38, 0.05);
+}
+
+.logicSummaryMain small {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.logicSummaryMain h3 {
+  margin: 4px 0 9px;
+  font-size: 20px;
+}
+
+.logicKeywordList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.logicKeywordList span,
+.logicKeywordList em {
+  border-radius: 999px;
+  background: #f0f5ef;
+  color: #5e6b61;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.logicSummaryRow dl {
+  display: grid;
+  grid-template-columns: repeat(4, auto);
+  gap: 14px;
+  margin: 0;
+}
+
+.logicSummaryRow dl div {
+  display: grid;
+  gap: 3px;
+  min-width: 44px;
+}
+
+.logicSummaryRow dt {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.logicSummaryRow dd {
+  margin: 0;
+  font-weight: 900;
+}
+
+.logicSummaryRow > button {
+  min-height: 42px;
+  border: 1px solid #d5e1d5;
+  border-radius: 13px;
+  background: #f8fbf7;
+  color: var(--green);
+  padding: 0 13px;
+  font-weight: 850;
+}
+
+.logicSummaryFuture {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 18px;
+  border: 1px dashed #d8dfd4;
+  border-radius: 17px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--muted);
+  padding: 14px 16px;
+  font-size: 13px;
+}
+
+.logicSummaryFuture strong {
+  color: var(--ink);
+}
+
+.logicPageGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.logicPageCard {
+  display: grid;
+  min-height: 172px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 87% 15%, rgba(223, 243, 92, 0.2), transparent 120px),
+    white;
+  padding: 24px;
+  color: var(--ink);
+  text-align: left;
+  box-shadow: 0 14px 45px rgba(35, 48, 38, 0.055);
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.logicPageCard:hover {
+  border-color: #a9c4b3;
+  transform: translateY(-3px);
+  box-shadow: 0 20px 55px rgba(35, 48, 38, 0.1);
+}
+
+.logicPageIndex {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 17px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+
+.logicPageCard small {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.logicPageCard h3 {
+  margin: 8px 0 7px;
+  font-size: 24px;
+  letter-spacing: -0.035em;
+}
+
+.logicPageCard p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.logicPageArrow {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--lime);
+  font-size: 22px;
+  transition: transform 180ms ease;
+}
+
+.logicPageCard:hover .logicPageArrow {
+  transform: translateX(3px);
+}
+
+.logicGraphPrototype {
+  position: relative;
+  --logic-level-accent: #247250;
+  --logic-level-accent-rgb: 36, 114, 80;
+  --logic-level-soft: #e4f3e8;
+  --logic-level-canvas: #f4faf4;
+  --logic-level-grid: rgba(36, 114, 80, 0.2);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 26px;
+  background: white;
+  box-shadow: var(--shadow);
+}
+
+.logicGraphLevel1 {
+  --logic-level-accent: #247250;
+  --logic-level-accent-rgb: 36, 114, 80;
+  --logic-level-soft: #e4f3e8;
+  --logic-level-canvas: #f4faf4;
+  --logic-level-grid: rgba(36, 114, 80, 0.2);
+}
+
+.logicGraphLevel2 {
+  --logic-level-accent: #376fa8;
+  --logic-level-accent-rgb: 55, 111, 168;
+  --logic-level-soft: #e6f0fb;
+  --logic-level-canvas: #f1f7fd;
+  --logic-level-grid: rgba(55, 111, 168, 0.22);
+  border-color: #c9daeb;
+  box-shadow: 0 20px 65px rgba(55, 111, 168, 0.13);
+}
+
+.logicGraphLevel3 {
+  --logic-level-accent: #7955a8;
+  --logic-level-accent-rgb: 121, 85, 168;
+  --logic-level-soft: #efe7f8;
+  --logic-level-canvas: #f8f3fc;
+  --logic-level-grid: rgba(121, 85, 168, 0.23);
+  border-color: #d9cbea;
+  box-shadow: 0 20px 65px rgba(121, 85, 168, 0.14);
+}
+
+.logicGraphToolbar {
+  position: relative;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: auto minmax(120px, 0.7fr) minmax(180px, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(90deg, rgba(var(--logic-level-accent-rgb), 0.13), transparent 44%),
+    rgba(255, 255, 255, 0.95);
+  padding: 12px 14px;
+  backdrop-filter: blur(16px);
+}
+
+.logicBackButton,
+.logicGraphTools button,
+.logicAddButton {
+  min-height: 42px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: white;
+  color: var(--ink);
+  padding: 0 13px;
+  font-weight: 800;
+}
+
+.logicGraphToolbar > div:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.logicGraphToolbar small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.logicGraphToolbar > div:nth-child(2) small {
+  justify-self: start;
+  border-radius: 999px;
+  background: var(--logic-level-soft);
+  color: var(--logic-level-accent);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.logicGraphToolbar strong {
+  overflow: hidden;
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logicPageSwitcher {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.logicPageSwitcher > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.logicPageSwitcher select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fbfcf9;
+  color: var(--ink);
+  padding: 0 36px 0 11px;
+  font-size: 14px;
+  font-weight: 800;
+  outline: none;
+}
+
+.logicPageSwitcher select:focus {
+  border-color: var(--logic-level-accent);
+  box-shadow: 0 0 0 3px rgba(var(--logic-level-accent-rgb), 0.09);
+}
+
+.logicBreadcrumb {
+  position: relative;
+  z-index: 6;
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 5px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--logic-level-soft) 58%, white);
+  padding: 7px 14px;
+  scrollbar-width: none;
+}
+
+.logicBreadcrumb::-webkit-scrollbar {
+  display: none;
+}
+
+.logicBreadcrumb span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.logicBreadcrumb b {
+  color: #a6afa7;
+  font-weight: 700;
+}
+
+.logicBreadcrumb button {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #657067;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.logicBreadcrumb button:not(:disabled):hover {
+  background: var(--logic-level-soft);
+  color: var(--logic-level-accent);
+}
+
+.logicBreadcrumb .logicBreadcrumbCurrent {
+  background: var(--logic-level-accent);
+  color: white;
+  box-shadow: 0 5px 14px rgba(var(--logic-level-accent-rgb), 0.2);
+}
+
+.logicBreadcrumb .logicLevelBack {
+  margin-left: auto;
+  border: 1px solid #d8e2d6;
+  background: white;
+  color: var(--logic-level-accent);
+}
+
+.logicGraphTools {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.logicGraphTools button {
+  min-width: 42px;
+  padding: 0 10px;
+}
+
+.logicGraphTools span {
+  min-width: 47px;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.logicAddButton {
+  border-color: var(--logic-level-accent);
+  background: var(--logic-level-accent);
+  color: white;
+  box-shadow: 0 8px 22px rgba(var(--logic-level-accent-rgb), 0.2);
+}
+
+.logicConnectHint {
+  position: absolute;
+  z-index: 8;
+  top: 124px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(31, 106, 73, 0.22);
+  border-radius: 999px;
+  background: rgba(247, 251, 246, 0.96);
+  padding: 8px 10px 8px 12px;
+  box-shadow: 0 12px 35px rgba(28, 47, 35, 0.15);
+  font-size: 14px;
+  transform: translateX(-50%);
+  backdrop-filter: blur(14px);
+}
+
+.logicConnectHint span {
+  color: var(--green);
+  font-weight: 900;
+}
+
+.logicConnectHint button {
+  border: 0;
+  border-radius: 999px;
+  background: var(--green-soft);
+  color: var(--green);
+  padding: 5px 9px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.logicCanvas {
+  position: relative;
+  height: min(680px, calc(100dvh - 230px));
+  min-height: 520px;
+  overflow: hidden;
+  background-color: var(--logic-level-canvas);
+  background-image: none;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.logicCanvasDive {
+  animation: logic-canvas-dive-out 180ms ease both;
+}
+
+.logicCanvasBack {
+  animation: logic-canvas-back-out 180ms ease both;
+}
+
+.logicCanvasArrive {
+  animation: logic-canvas-arrive 260ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
+}
+
+.logicCanvas:active {
+  cursor: grabbing;
+}
+
+.logicSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.logicSvg > g,
+.logicEdge,
+.logicNode {
+  pointer-events: auto;
+}
+
+.logicEdge line:not(.logicEdgeHitbox) {
+  stroke: #aeb7ae;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  transition: stroke 160ms ease, stroke-width 160ms ease;
+}
+
+.logicEdge path {
+  fill: #718074;
+}
+
+.logicEdgeHitbox {
+  stroke: transparent;
+  stroke-width: 22;
+  vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.logicEdgeSelected line:not(.logicEdgeHitbox) {
+  stroke: var(--logic-level-accent);
+  stroke-width: 3;
+}
+
+.logicEdgeFresh line:not(.logicEdgeHitbox) {
+  stroke-dasharray: 800;
+  stroke-dashoffset: 800;
+  animation: logic-line-draw 380ms ease forwards;
+}
+
+.logicEdgeLabel rect {
+  fill: rgba(255, 255, 255, 0.94);
+  stroke: #dce4d9;
+}
+
+.logicEdgeLabel text {
+  fill: #657066;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.logicNode {
+  cursor: grab;
+}
+
+.logicNode:active {
+  cursor: grabbing;
+}
+
+.logicNodeHitbox {
+  fill: transparent;
+}
+
+.logicNodeRing {
+  fill: rgba(31, 106, 73, 0.07);
+  opacity: 0;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.logicNodeChildRing {
+  fill: none;
+  stroke: rgba(var(--logic-level-accent-rgb), 0.48);
+  stroke-width: 2;
+  stroke-dasharray: 3 4;
+  vector-effect: non-scaling-stroke;
+  animation: logic-child-ring 12s linear infinite;
+}
+
+.logicNodeDot {
+  fill: #1d211d;
+  filter: drop-shadow(0 5px 7px rgba(24, 35, 27, 0.16));
+  transition: fill 160ms ease, transform 160ms ease;
+}
+
+.logicNode text {
+  fill: #273029;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  paint-order: stroke;
+  stroke: #fbfcf8;
+  stroke-width: 6px;
+  stroke-linejoin: round;
+}
+
+.logicNodeChildCount circle {
+  fill: var(--logic-level-accent);
+  stroke: #fbfcf8;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.logicNode .logicNodeChildCount text {
+  fill: white;
+  stroke: none;
+  font-size: 10px;
+  font-weight: 950;
+  pointer-events: none;
+}
+
+.logicNodeSelected .logicNodeRing {
+  fill: rgba(var(--logic-level-accent-rgb), 0.15);
+  opacity: 1;
+}
+
+.logicNodeSelected .logicNodeDot {
+  fill: var(--logic-level-accent);
+  transform: scale(1.08);
+}
+
+.logicNodeFresh {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: logic-node-pop 320ms cubic-bezier(0.22, 1.35, 0.38, 1);
+}
+
+.logicInspector {
+  position: absolute;
+  z-index: 9;
+  right: 18px;
+  bottom: 18px;
+  display: grid;
+  width: min(360px, calc(100% - 36px));
+  max-height: calc(100% - 36px);
+  overflow-y: auto;
+  gap: 14px;
+  border: 1px solid rgba(213, 221, 211, 0.95);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 18px;
+  box-shadow: 0 20px 65px rgba(24, 35, 27, 0.18);
+  cursor: default;
+  user-select: text;
+  backdrop-filter: blur(18px);
+  animation: logic-panel-enter 220ms ease;
+}
+
+.logicInspectorHeader {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+}
+
+.logicInspectorHeader small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.logicInspectorHeader h3 {
+  margin: 2px 0 0;
+  font-size: 20px;
+}
+
+.logicInspectorHeader > button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: white;
+  font-size: 22px;
+}
+
+.logicInspectorDot {
+  width: 17px;
+  height: 17px;
+  border: 5px solid var(--logic-level-soft);
+  border-radius: 50%;
+  background: var(--logic-level-accent);
+  box-sizing: content-box;
+}
+
+.logicInspectorLine {
+  width: 28px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--green);
+}
+
+.logicInspector > p {
+  margin: 0;
+  color: #4e5850;
+  line-height: 1.7;
+}
+
+.logicNodeFiles {
+  display: grid;
+  gap: 10px;
+  border: 1px solid rgba(var(--logic-level-accent-rgb), 0.18);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--logic-level-soft) 48%, white);
+  padding: 12px;
+}
+
+.logicNodeFilesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.logicNodeFilesHeader > span {
+  display: grid;
+  gap: 2px;
+}
+
+.logicNodeFilesHeader strong {
+  font-size: 14px;
+}
+
+.logicNodeFilesHeader small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.logicNodeFilesHeader > label {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  border: 1px solid rgba(var(--logic-level-accent-rgb), 0.24);
+  border-radius: 10px;
+  background: white;
+  color: var(--logic-level-accent);
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.logicNodeFilesHeader input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.logicNodeFiles > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.logicNodeFileList {
+  display: grid;
+  gap: 7px;
+}
+
+.logicNodeFileList article {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid rgba(var(--logic-level-accent-rgb), 0.13);
+  border-radius: 11px;
+  background: white;
+  padding: 8px;
+}
+
+.logicNodeFileList article > span {
+  border-radius: 7px;
+  background: var(--logic-level-soft);
+  color: var(--logic-level-accent);
+  padding: 5px 6px;
+  font-size: 10px;
+  font-weight: 950;
+}
+
+.logicNodeFileList a {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.logicNodeFileList a strong {
+  overflow: hidden;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logicNodeFileList a small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.logicNodeFileList article > button {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: #fbf2ed;
+  color: #a65339;
+  font-size: 17px;
+}
+
+.logicChildButton {
+  display: flex;
+  min-height: 67px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid rgba(var(--logic-level-accent-rgb), 0.24);
+  border-radius: 16px;
+  background: linear-gradient(135deg, white, var(--logic-level-soft));
+  color: var(--logic-level-accent);
+  padding: 12px 14px;
+  text-align: left;
+}
+
+.logicChildButton span {
+  display: grid;
+  gap: 3px;
+}
+
+.logicChildButton small {
+  color: #66816e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.logicChildButton strong {
+  font-size: 15px;
+}
+
+.logicChildButton > b {
+  flex: 0 0 auto;
+  font-size: 16px;
+}
+
+.logicDepthNote {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e2ddd1;
+  border-radius: 15px;
+  background: #fcfaf4;
+  color: #6d6657;
+  padding: 12px 14px;
+}
+
+.logicDepthNote strong {
+  color: #554c3d;
+  font-size: 14px;
+}
+
+.logicDepthNote span {
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.logicInspector label,
+.logicDialog label {
+  display: grid;
+  gap: 7px;
+  color: #536056;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.logicInspector input,
+.logicDialog input,
+.logicDialog textarea {
+  width: 100%;
+  border: 1px solid #dbe1d8;
+  border-radius: 13px;
+  background: #fbfcf9;
+  color: var(--ink);
+  padding: 11px 12px;
+  outline: none;
+}
+
+.logicDialog textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.logicInspector input:focus,
+.logicDialog input:focus,
+.logicDialog textarea:focus {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(31, 106, 73, 0.09);
+}
+
+.logicInspectorActions,
+.logicDialogActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.logicDirectionToggle {
+  display: flex !important;
+  align-items: center;
+  gap: 9px !important;
+}
+
+.logicDirectionToggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--green);
+}
+
+.logicDeleteLink {
+  justify-self: start;
+  border: 0;
+  background: transparent;
+  color: #b05436;
+  padding: 2px 0;
+  font-weight: 800;
+}
+
+.logicCanvasEmpty {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: min(380px, calc(100% - 40px));
+  color: var(--muted);
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.logicCanvasEmpty > span {
+  display: grid;
+  width: 60px;
+  height: 60px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 26px;
+}
+
+.logicCanvasEmpty h3 {
+  margin: 15px 0 5px;
+  color: var(--ink);
+  font-size: 24px;
+}
+
+.logicCanvasEmpty p {
+  margin: 0 0 18px;
+}
+
+.logicPrototypeFooter {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border-top: 1px solid var(--line);
+  background: #fafbf7;
+  color: var(--muted);
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.logicPrototypeFooter span {
+  padding: 3px 8px;
+}
+
+.logicOverlay {
+  position: fixed;
+  z-index: 120;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(21, 29, 23, 0.46);
+  padding: 20px;
+  backdrop-filter: blur(7px);
+}
+
+.logicDialog {
+  display: grid;
+  width: min(520px, 100%);
+  gap: 17px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 24px;
+  background: white;
+  padding: 24px;
+  box-shadow: 0 28px 90px rgba(20, 30, 23, 0.25);
+  animation: logic-dialog-enter 220ms ease;
+}
+
+.logicDialog h3 {
+  margin: -8px 0 2px;
+  font-size: 26px;
+  letter-spacing: -0.04em;
+}
+
+.logicDialog > small {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.logicDialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@keyframes logic-node-pop {
+  0% { opacity: 0; transform: scale(0.35); }
+  70% { opacity: 1; transform: scale(1.12); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes logic-line-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+@keyframes logic-panel-enter {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes logic-dialog-enter {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes logic-child-ring {
+  to { stroke-dashoffset: -120; }
+}
+
+@keyframes logic-canvas-dive-out {
+  from { opacity: 1; transform: scale(1); filter: blur(0); }
+  to { opacity: 0; transform: scale(1.035); filter: blur(2px); }
+}
+
+@keyframes logic-canvas-back-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.975); }
+}
+
+@keyframes logic-canvas-arrive {
+  from { opacity: 0; transform: scale(0.975); }
+  to { opacity: 1; transform: scale(1); }
+}
+
 .mobileNav {
   display: none;
 }
@@ -4441,7 +5733,7 @@
     inset: auto 12px 12px;
     z-index: 50;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     border: 1px solid rgba(228, 231, 223, 0.9);
     border-radius: 20px;
     background: rgba(255, 255, 255, 0.92);
@@ -4492,8 +5784,247 @@
     overflow-x: clip;
   }
 
+  .dayAgendaQuickDate {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .dayAgendaQuickDate label {
+    justify-content: space-between;
+  }
+
+  .dayAgendaQuickDate input {
+    min-width: 150px;
+  }
+
+  .dayAgendaQuickDate > small {
+    text-align: left;
+  }
+
+  .calendarMoveNotice {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .calendarMoveActions {
+    align-self: stretch;
+    justify-content: flex-end;
+  }
+
   .main {
     padding: 20px 14px calc(116px + env(safe-area-inset-bottom));
+  }
+
+  .prototypeStatus {
+    align-self: flex-start;
+    min-height: 34px;
+    padding: 0 11px;
+    font-size: 13px;
+  }
+
+  .logicNotebookHeader {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 18px;
+    padding: 30px 2px 20px;
+  }
+
+  .logicNotebookHeader > button,
+  .logicNotebookActions {
+    align-self: flex-start;
+  }
+
+  .logicNotebookActions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .logicSummaryHeader {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
+    padding: 14px 2px 20px;
+  }
+
+  .logicSummaryHeader > button {
+    align-self: flex-start;
+  }
+
+  .logicSummaryStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  .logicSummaryStats article {
+    border-radius: 17px;
+    padding: 15px;
+  }
+
+  .logicSummaryRow {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 13px;
+    border-radius: 19px;
+    padding: 16px;
+  }
+
+  .logicSummaryRow dl {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, 1fr);
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+  }
+
+  .logicSummaryRow > button {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .logicSummaryFuture {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .logicPageGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .logicPageCard {
+    min-height: 134px;
+    gap: 13px;
+    border-radius: 20px;
+    padding: 18px;
+  }
+
+  .logicPageIndex {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+
+  .logicPageCard h3 {
+    font-size: 21px;
+  }
+
+  .logicPageArrow {
+    width: 38px;
+    height: 38px;
+  }
+
+  .prototypeNotice {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .prototypeNotice > span {
+    padding: 4px 7px;
+    font-size: 11px;
+  }
+
+  .logicGraphPrototype {
+    width: calc(100% + 28px);
+    margin: 0 -14px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
+  .logicGraphToolbar {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 9px 10px;
+  }
+
+  .logicPageSwitcher {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .logicPageSwitcher > span {
+    display: none;
+  }
+
+  .logicPageSwitcher select {
+    min-height: 38px;
+  }
+
+  .logicGraphTools {
+    display: none;
+  }
+
+  .logicBackButton,
+  .logicAddButton {
+    min-height: 40px;
+    padding: 0 11px;
+    font-size: 14px;
+  }
+
+  .logicCanvas {
+    height: calc(100dvh - 322px);
+    min-height: 500px;
+  }
+
+  .logicBreadcrumb {
+    min-height: 43px;
+    padding: 6px 9px;
+  }
+
+  .logicBreadcrumb button {
+    padding: 5px 6px;
+    font-size: 12px;
+  }
+
+  .logicBreadcrumb .logicLevelBack {
+    display: none;
+  }
+
+  .logicConnectHint {
+    top: 150px;
+    width: max-content;
+    max-width: calc(100% - 20px);
+    gap: 7px;
+    font-size: 13px;
+  }
+
+  .logicInspector {
+    right: 10px;
+    bottom: 10px;
+    width: calc(100% - 20px);
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .logicInspectorActions {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .logicChildButton {
+    min-height: 62px;
+  }
+
+  .logicPrototypeFooter {
+    align-items: flex-start;
+    padding: 9px 11px;
+    line-height: 1.5;
+  }
+
+  .logicDialog {
+    max-height: calc(100dvh - 36px);
+    overflow-y: auto;
+    border-radius: 20px;
+    padding: 20px;
+  }
+
+  .logicDialogActions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mobileNav button {
+    padding: 6px 1px;
+    font-size: 12px;
   }
 
   .pageGrid,
