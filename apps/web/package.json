@@ -9,7 +9,7 @@
     "dev": "vinext dev",
     "dev:lan": "vinext dev --hostname 0.0.0.0 --port 3001",
     "dev:test": "vinext dev --hostname 127.0.0.1 --port 3001 --mode test",
-    "build": "vinext build",
+    "build": "vinext build && node scripts/normalize-wrangler.mjs",
     "start": "vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
