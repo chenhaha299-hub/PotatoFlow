@@ -276,7 +276,7 @@ type CustomTaskDraft = {
   milestone: string;
   why: string;
   note: string;
-  steps: string;
+  steps: string[];
   acceptanceCriteria: string;
   scheduleType: ScheduleType;
   startDate: string;
@@ -817,6 +817,16 @@ function taskLevel(task: Task) {
   return "incomplete";
 }
 
+function moveArrayItem<T>(items: T[], from: number, to: number) {
+  if (from < 0 || from >= items.length || to < 0 || to >= items.length) {
+    return [...items];
+  }
+  const next = [...items];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
 function taskCompletion(task: Task) {
   if (task.status === "done") return 100;
   const steps = task.steps || [];
@@ -828,11 +838,13 @@ function taskCompletion(task: Task) {
   return Math.round((completedSteps / steps.length) * 100);
 }
 
-function taskStatusFromProgress(task: Task, isBlocked = false): TaskStatus {
+function taskStatusFromProgress(task: Task, isBlocked?: boolean): TaskStatus {
   if (task.status === "cancelled") return "cancelled";
   const progress = taskCompletion(task);
   if (progress === 100) return "done";
-  if (isBlocked || task.status === "blocked") return "blocked";
+  if (isBlocked === true || (isBlocked === undefined && task.status === "blocked")) {
+    return "blocked";
+  }
   if (progress > 0 || (task.result_report || "").trim()) return "doing";
   return task.scheduled_date ? "scheduled" : "backlog";
 }
@@ -1293,7 +1305,7 @@ export default function PotatoFlowApp({
     milestone: "",
     why: "",
     note: "",
-    steps: "",
+    steps: [],
     acceptanceCriteria: "",
     scheduleType: "once",
     startDate: localDate(),
@@ -1324,6 +1336,7 @@ export default function PotatoFlowApp({
     null,
   );
   const [executionDraft, setExecutionDraft] = useState<Task | null>(null);
+  const [taskDefinitionEditing, setTaskDefinitionEditing] = useState(false);
   const [openStepNoteIndex, setOpenStepNoteIndex] = useState<number | null>(
     null,
   );
@@ -1779,7 +1792,9 @@ export default function PotatoFlowApp({
       // Reset drafts when the user leaves the task workspace.
       setOrganizationDraft(null);
       setExecutionDraft(null);
+      setTaskDefinitionEditing(false);
       setOpenStepNoteIndex(null);
+      setTaskDefinitionEditing(false);
       return;
     }
     const storedTask = store.tasks.find((item) => item.id === selectedTaskId);
@@ -2091,6 +2106,8 @@ export default function PotatoFlowApp({
         JSON.stringify(datedSelectedTask?.step_results || []) ||
       JSON.stringify(executionDraft?.step_reports || []) !==
         JSON.stringify(datedSelectedTask?.step_reports || []) ||
+      JSON.stringify(taskDefinition(executionDraft as Task)) !==
+        JSON.stringify(taskDefinition(datedSelectedTask as Task)) ||
       (executionDraft?.result_report || "") !==
         (datedSelectedTask?.result_report || "") ||
       executionDraft?.paused !== datedSelectedTask?.paused ||
@@ -2107,6 +2124,7 @@ export default function PotatoFlowApp({
     setSelectedTaskDate(null);
     setOrganizationDraft(null);
     setExecutionDraft(null);
+    setTaskDefinitionEditing(false);
     setOpenStepNoteIndex(null);
     setIssueText("");
     setIssueBlocksTask(false);
@@ -2122,11 +2140,34 @@ export default function PotatoFlowApp({
 
   function saveOrganizationAndClose() {
     if (!selectedTask) return;
+    const keptStepIndexes = (selectedTask.steps || [])
+      .map((step, index) => ({ step: step.trim(), index }))
+      .filter((item) => item.step.length > 0);
+    const cleanedCriteria = selectedTask.acceptance_criteria
+      .map((criterion) => criterion.trim())
+      .filter(Boolean);
+    const taskToSave: Task = {
+      ...selectedTask,
+      title: selectedTask.title.trim(),
+      objective: selectedTask.objective.trim() || selectedTask.title.trim(),
+      milestone: selectedTask.milestone?.trim() || "",
+      why: selectedTask.why?.trim() || "",
+      steps: keptStepIndexes.map((item) => item.step),
+      step_results: keptStepIndexes.map(
+        (item) => selectedTask.step_results?.[item.index] === true,
+      ),
+      step_reports: keptStepIndexes.map(
+        (item) => selectedTask.step_reports?.[item.index] || "",
+      ),
+      acceptance_criteria: cleanedCriteria.length
+        ? cleanedCriteria
+        : [`完成“${selectedTask.title.trim()}”并记录结果`],
+    };
     const issue: Issue | null = issueText.trim()
       ? {
           id: `issue-${crypto.randomUUID()}`,
-          task_id: selectedTask.id,
-          project_id: selectedTask.project_id,
+          task_id: taskToSave.id,
+          project_id: taskToSave.project_id,
           question: issueText.trim(),
           attempts: [],
           status: "open",
@@ -2138,30 +2179,40 @@ export default function PotatoFlowApp({
     updateStore((current) => ({
       ...current,
       tasks: current.tasks.map((task) => {
-        if (task.id !== selectedTask.id) return task;
+        if (task.id !== taskToSave.id) return task;
         const category =
-          organizationDraft?.category || taskCategory(selectedTask);
+          organizationDraft?.category || taskCategory(taskToSave);
         const priority =
-          organizationDraft?.priority || selectedTask.priority || 3;
+          organizationDraft?.priority || taskToSave.priority || 3;
         if (task.recurrence && selectedTaskDate) {
           const occurrence_results = {
             ...(task.occurrence_results || {}),
             [selectedTaskDate]: {
-              step_results: [...(selectedTask.step_results || [])],
-              step_reports: [...(selectedTask.step_reports || [])],
+              step_results: [...(taskToSave.step_results || [])],
+              step_reports: [...(taskToSave.step_reports || [])],
               criterion_results: [
-                ...(selectedTask.criterion_results || []),
+                ...(taskToSave.criterion_results || []),
               ],
-              result_report: selectedTask.result_report || "",
-              completed: selectedTask.status === "done",
-              paused: selectedTask.paused || false,
+              result_report: taskToSave.result_report || "",
+              completed: taskToSave.status === "done",
+              paused: taskToSave.paused || false,
             },
           };
           return {
             ...task,
+            title: taskToSave.title,
+            objective: taskToSave.objective,
+            milestone: taskToSave.milestone,
+            why: taskToSave.why,
+            steps: taskToSave.steps,
+            acceptance_criteria: taskToSave.acceptance_criteria,
+            scheduled_date: taskToSave.scheduled_date,
+            end_date: taskToSave.end_date,
+            recurrence: taskToSave.recurrence,
+            estimated_minutes: taskToSave.estimated_minutes,
             category,
             priority,
-            note: selectedTask.note || "",
+            note: taskToSave.note || "",
             occurrence_results,
             status:
               issue?.blocks_task === true
@@ -2174,15 +2225,15 @@ export default function PotatoFlowApp({
           };
         }
         return {
-          ...selectedTask,
+          ...taskToSave,
           occurrence_date: undefined,
           category,
           priority,
-          result_report: selectedTask.result_report || "",
+          result_report: taskToSave.result_report || "",
           status:
             issue?.blocks_task === true
               ? "blocked"
-              : taskStatusFromProgress(selectedTask),
+              : taskStatusFromProgress(taskToSave),
         };
       }),
       issues: issue ? [...current.issues, issue] : current.issues,
@@ -3018,7 +3069,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
         .split("\n")
         .map((item) => item.trim())
         .filter(Boolean);
-    const steps = lines(customTaskDraft.steps);
+    const steps = customTaskDraft.steps.map((step) => step.trim()).filter(Boolean);
     const acceptanceCriteria = lines(customTaskDraft.acceptanceCriteria);
     const createdAt = new Date().toISOString();
     const usesPersonalProject =
@@ -3170,7 +3221,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       milestone: "",
       why: "",
       note: "",
-      steps: "",
+      steps: [],
       acceptanceCriteria: "",
       scheduleType: "once",
       startDate,
@@ -3264,6 +3315,53 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
         index === stepIndex ? note : task.step_reports?.[index] || "",
       );
       return { ...task, step_reports: stepReports };
+    });
+  }
+
+  function updateDraftStepDefinition(
+    operation:
+      | { type: "add" }
+      | { type: "change"; index: number; value: string }
+      | { type: "remove"; index: number }
+      | { type: "move"; index: number; direction: -1 | 1 },
+  ) {
+    setExecutionDraft((task) => {
+      if (!task) return task;
+      let steps = [...(task.steps || [])];
+      let stepResults = steps.map((_, index) => task.step_results?.[index] === true);
+      let stepReports = steps.map((_, index) => task.step_reports?.[index] || "");
+      if (operation.type === "add") {
+        steps.push("");
+        stepResults.push(false);
+        stepReports.push("");
+      } else if (operation.type === "change") {
+        steps[operation.index] = operation.value;
+      } else if (operation.type === "remove") {
+        steps = steps.filter((_, index) => index !== operation.index);
+        stepResults = stepResults.filter((_, index) => index !== operation.index);
+        stepReports = stepReports.filter((_, index) => index !== operation.index);
+      } else {
+        const target = operation.index + operation.direction;
+        steps = moveArrayItem(steps, operation.index, target);
+        stepResults = moveArrayItem(stepResults, operation.index, target);
+        stepReports = moveArrayItem(stepReports, operation.index, target);
+      }
+      const allComplete = steps.length > 0 && stepResults.every(Boolean);
+      const hasProgress = stepResults.some(Boolean);
+      return {
+        ...task,
+        steps,
+        step_results: stepResults,
+        step_reports: stepReports,
+        status: allComplete
+          ? "done"
+          : hasProgress || (task.result_report || "").trim()
+            ? "doing"
+            : task.scheduled_date
+              ? "scheduled"
+              : "backlog",
+        paused: allComplete ? false : task.paused,
+      };
     });
   }
 
@@ -5140,6 +5238,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       }
                       placeholder="例如：内容准备"
                     />
+                    <small className={styles.fieldHelp}>
+                      同一项目中填写相同名称的任务会自动归在同一阶段，例如“第一阶段｜内容准备”。
+                    </small>
                   </label>
                   <label>
                     <span>为什么做</span>
@@ -5167,19 +5268,37 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       placeholder="补充提醒、注意事项或执行时需要记住的信息；没有可留空。"
                     />
                   </label>
-                  <label className={styles.customTaskWide}>
-                    <span>执行步骤（仅用于查看流程，每行一条）</span>
-                    <textarea
-                      value={customTaskDraft.steps}
-                      onChange={(event) =>
+                  <div className={styles.customTaskWide}>
+                    <EditableSteps
+                      steps={customTaskDraft.steps}
+                      onAdd={() =>
                         setCustomTaskDraft((current) => ({
                           ...current,
-                          steps: event.target.value,
+                          steps: [...current.steps, ""],
                         }))
                       }
-                      placeholder={"整理现有资料\n完成第一版\n检查并记录结果"}
+                      onChange={(index, value) =>
+                        setCustomTaskDraft((current) => ({
+                          ...current,
+                          steps: current.steps.map((step, stepIndex) =>
+                            stepIndex === index ? value : step,
+                          ),
+                        }))
+                      }
+                      onRemove={(index) =>
+                        setCustomTaskDraft((current) => ({
+                          ...current,
+                          steps: current.steps.filter((_, stepIndex) => stepIndex !== index),
+                        }))
+                      }
+                      onMove={(index, direction) =>
+                        setCustomTaskDraft((current) => ({
+                          ...current,
+                          steps: moveArrayItem(current.steps, index, index + direction),
+                        }))
+                      }
                     />
-                  </label>
+                  </div>
                   <label className={styles.customTaskWide}>
                     <span>完成标准（用于判断整项任务，每行一条）</span>
                     <textarea
@@ -6694,13 +6813,131 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
           >
             <div className={styles.drawerHeader}>
               <span>{selectedProject.name}</span>
-              <button
-                aria-label="关闭任务详情"
-                onClick={requestCloseTask}
-              >
-                ×
-              </button>
+              <div className={styles.taskDrawerActions}>
+                <button
+                  type="button"
+                  className={styles.taskEditButton}
+                  aria-pressed={taskDefinitionEditing}
+                  onClick={() => setTaskDefinitionEditing((current) => !current)}
+                >
+                  {taskDefinitionEditing ? "收起编辑" : "编辑任务"}
+                </button>
+                <button aria-label="关闭任务详情" onClick={requestCloseTask}>×</button>
+              </div>
             </div>
+            {taskDefinitionEditing && (
+              <section className={styles.taskDefinitionEditor} aria-label="编辑任务内容">
+                <div className={styles.taskDefinitionEditorHeading}>
+                  <div>
+                    <p className={styles.eyebrow}>编辑任务</p>
+                    <h3>修改任务的内容与执行流程</h3>
+                  </div>
+                  <span>所有修改在退出时统一保存</span>
+                </div>
+                <div className={styles.customTaskForm}>
+                  <label>
+                    <span>任务标题</span>
+                    <input
+                      aria-label="编辑任务标题"
+                      value={selectedTask.title}
+                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, title: event.target.value } : task)}
+                    />
+                  </label>
+                  <label>
+                    <span>任务分块 / 里程碑</span>
+                    <input
+                      aria-label="编辑任务分块"
+                      value={selectedTask.milestone || ""}
+                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, milestone: event.target.value } : task)}
+                    />
+                    <small className={styles.fieldHelp}>相同项目中使用相同分块名称的任务会显示在同一阶段。</small>
+                  </label>
+                  <label className={styles.customTaskWide}>
+                    <span>任务详情 / 要达成的结果</span>
+                    <textarea
+                      aria-label="编辑任务详情"
+                      value={selectedTask.objective}
+                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, objective: event.target.value } : task)}
+                    />
+                  </label>
+                  <label className={styles.customTaskWide}>
+                    <span>为什么做</span>
+                    <textarea
+                      aria-label="编辑为什么做"
+                      value={selectedTask.why || ""}
+                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, why: event.target.value } : task)}
+                    />
+                  </label>
+                  <div className={styles.customTaskWide}>
+                    <EditableSteps
+                      steps={selectedTask.steps || []}
+                      onAdd={() => updateDraftStepDefinition({ type: "add" })}
+                      onChange={(index, value) => updateDraftStepDefinition({ type: "change", index, value })}
+                      onRemove={(index) => updateDraftStepDefinition({ type: "remove", index })}
+                      onMove={(index, direction) => updateDraftStepDefinition({ type: "move", index, direction })}
+                    />
+                  </div>
+                  <label className={styles.customTaskWide}>
+                    <span>完成标准（每行一条）</span>
+                    <textarea
+                      aria-label="编辑完成标准"
+                      value={selectedTask.acceptance_criteria.join("\n")}
+                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, acceptance_criteria: event.target.value.split("\n") } : task)}
+                    />
+                  </label>
+                  <label>
+                    <span>开始日期</span>
+                    <input
+                      aria-label="编辑任务开始日期"
+                      type="date"
+                      value={selectedTask.scheduled_date || ""}
+                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, scheduled_date: event.target.value || null } : task)}
+                    />
+                  </label>
+                  <label>
+                    <span>结束日期</span>
+                    <input
+                      aria-label="编辑任务结束日期"
+                      type="date"
+                      min={selectedTask.scheduled_date || undefined}
+                      value={selectedTask.end_date || ""}
+                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, end_date: event.target.value || null } : task)}
+                    />
+                  </label>
+                  <label>
+                    <span>重复方式</span>
+                    <select
+                      aria-label="编辑任务重复方式"
+                      value={taskScheduleType(selectedTask)}
+                      onChange={(event) => {
+                        const value = event.target.value as ScheduleType;
+                        setExecutionDraft((task) => task ? {
+                          ...task,
+                          recurrence: value === "daily" || value === "weekdays" || value === "weekends" ? value : null,
+                          end_date: value === "once" ? null : task.end_date || task.scheduled_date,
+                        } : task);
+                      }}
+                    >
+                      <option value="once">一次性任务</option>
+                      <option value="range">持续一段时间</option>
+                      <option value="daily">每天</option>
+                      <option value="weekdays">每个工作日</option>
+                      <option value="weekends">每个周末</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>预计用时（分钟）</span>
+                    <input
+                      aria-label="编辑预计用时"
+                      type="number"
+                      min="1"
+                      value={selectedTask.estimated_minutes || 30}
+                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, estimated_minutes: Math.max(1, Number(event.target.value) || 1) } : task)}
+                    />
+                  </label>
+                </div>
+              </section>
+            )}
             <p className={styles.eyebrow}>
               {selectedTask.milestone || "未设置里程碑"}
             </p>
@@ -7642,6 +7879,54 @@ function CalendarView({
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function EditableSteps({
+  steps,
+  onAdd,
+  onChange,
+  onRemove,
+  onMove,
+}: {
+  steps: string[];
+  onAdd: () => void;
+  onChange: (index: number, value: string) => void;
+  onRemove: (index: number) => void;
+  onMove: (index: number, direction: -1 | 1) => void;
+}) {
+  return (
+    <section className={styles.stepEditor} aria-label="执行步骤编辑器">
+      <div className={styles.stepEditorHeader}>
+        <div>
+          <strong>执行步骤</strong>
+          <small>按实际顺序逐步添加；创建后每一步都可以单独勾选。</small>
+        </div>
+        <button type="button" onClick={onAdd}>＋ 添加执行步骤</button>
+      </div>
+      {steps.length ? (
+        <div className={styles.stepEditorList}>
+          {steps.map((step, index) => (
+            <article className={styles.stepEditorItem} key={`draft-step-${index}`}>
+              <span className={styles.stepEditorNumber}>{String(index + 1).padStart(2, "0")}</span>
+              <textarea
+                aria-label={`执行步骤 ${index + 1}`}
+                value={step}
+                onChange={(event) => onChange(index, event.target.value)}
+                placeholder="填写这一步具体要做什么，可以写较长的操作说明。"
+              />
+              <div className={styles.stepEditorActions}>
+                <button type="button" disabled={index === 0} onClick={() => onMove(index, -1)} aria-label={`上移执行步骤 ${index + 1}`}>↑</button>
+                <button type="button" disabled={index === steps.length - 1} onClick={() => onMove(index, 1)} aria-label={`下移执行步骤 ${index + 1}`}>↓</button>
+                <button type="button" className={styles.stepEditorDelete} onClick={() => onRemove(index)} aria-label={`删除执行步骤 ${index + 1}`}>删除</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p className={styles.stepEditorEmpty}>暂未添加步骤。任务创建后仍可在详情中继续补充。</p>
+      )}
     </section>
   );
 }

@@ -200,12 +200,13 @@ test("JSON 导入、文件关联、任务执行、问题与持久化形成闭环
     .getByText("测试阻碍：需要确认问题与原任务能够互相跳转。")
     .click();
   await page.getByRole("button", { name: "标记已解决" }).click();
-  await navigateTo(page, "今天");
+  await navigateTo(page, "项目");
   await expect(
     page.locator("button:visible").filter({ hasText: "验证完整执行流程" }),
   ).toContainText("已完成");
 
   await page.reload();
+  await navigateTo(page, "项目");
   await expect(page.getByText("验证完整执行流程", { exact: true })).toBeVisible();
   await expect(
     page.locator("button:visible").filter({ hasText: "验证完整执行流程" }),
@@ -217,7 +218,10 @@ test("自定义重复任务和日历快速改期可用", async ({ page }) => {
   await page.getByRole("button", { name: "＋ 自定义任务" }).click();
   await page.getByLabel("任务标题 *").fill("每个工作日复盘");
   await page.getByLabel("任务详情 / 要达成的结果").fill("工作日结束前记录当天结果");
-  await page.getByLabel("执行步骤（仅用于查看流程，每行一条）").fill("记录完成事项\n写下明日重点");
+  await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
+  await page.getByRole("textbox", { name: "执行步骤 1", exact: true }).fill("记录完成事项");
+  await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
+  await page.getByRole("textbox", { name: "执行步骤 2", exact: true }).fill("写下明日重点");
   await page.getByLabel("时间安排").selectOption("weekdays");
   const dateInputs = page.locator('input[type="date"]');
   await dateInputs.nth(0).fill("2026-08-03");
@@ -225,10 +229,29 @@ test("自定义重复任务和日历快速改期可用", async ({ page }) => {
   await page.getByRole("button", { name: "创建到首页" }).click();
   await expect(page.getByText("每个工作日复盘", { exact: true })).toBeVisible();
 
+  await page.getByText("每个工作日复盘", { exact: true }).click();
+  const taskDrawer = page.getByRole("button", { name: "关闭任务详情" }).locator("xpath=ancestor::aside");
+  if ((page.viewportSize()?.width || 0) > 620) {
+    const box = await taskDrawer.boundingBox();
+    expect(box).not.toBeNull();
+    expect(Math.abs((box?.x || 0) + (box?.width || 0) / 2 - (page.viewportSize()?.width || 0) / 2)).toBeLessThan(8);
+  }
+  await page.getByRole("button", { name: "编辑任务" }).click();
+  await page.getByLabel("编辑任务标题").fill("每个工作日复盘（已编辑）");
+  await page.getByLabel("编辑任务分块").fill("第一阶段｜日常复盘");
+  await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
+  await page.getByRole("textbox", { name: "执行步骤 3", exact: true }).fill("归档复盘记录");
+  await page.getByRole("button", { name: "关闭任务详情" }).click();
+  await page
+    .locator('[role="alertdialog"]:visible')
+    .getByRole("button", { name: "保存并退出", exact: true })
+    .click();
+  await expect(page.getByText("每个工作日复盘（已编辑）", { exact: true })).toBeVisible();
+
   await page.getByRole("button", { name: /日历/ }).click();
   await page.locator('[role="button"][aria-label*="1 项任务"]:visible').click();
   await expect(page.getByRole("heading", { name: /8月[3-7]日/ })).toBeVisible();
-  const quickDate = page.getByLabel(/修改“每个工作日复盘”的日期/);
+  const quickDate = page.getByLabel(/修改“每个工作日复盘（已编辑）”的日期/);
   await quickDate.fill("2026-08-10");
   await expect(page.getByText(/日期已修改|已移动/)).toBeVisible();
 });
@@ -341,6 +364,7 @@ test("真实 Word、PDF、非法格式与超限文件均被正确处理", async 
 
   await page.getByRole("button", { name: "关闭项目规划" }).click();
   await page.reload();
+  await navigateTo(page, "项目");
   await page
     .getByText("验证完整执行流程", { exact: true })
     .locator("xpath=ancestor::button[1]")

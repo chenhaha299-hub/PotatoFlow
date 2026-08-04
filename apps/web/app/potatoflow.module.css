@@ -2508,6 +2508,117 @@
   font-weight: 900;
 }
 
+.fieldHelp {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.stepEditor {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #c9d8cb;
+  border-radius: 16px;
+  background: #f8fbf7;
+  padding: 14px;
+}
+
+.stepEditorHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.stepEditorHeader > div {
+  display: grid;
+  gap: 3px;
+}
+
+.stepEditorHeader strong {
+  color: #435247;
+  font-size: 14px;
+}
+
+.stepEditorHeader small,
+.stepEditorEmpty {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.stepEditorHeader > button {
+  flex: 0 0 auto;
+  min-height: 38px;
+  border: 1px solid #8eb49a;
+  border-radius: 10px;
+  background: white;
+  color: var(--green);
+  padding: 0 12px;
+  font-weight: 900;
+}
+
+.stepEditorList {
+  display: grid;
+  gap: 10px;
+}
+
+.stepEditorItem {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  border: 1px solid #dce5dc;
+  border-radius: 13px;
+  background: white;
+  padding: 11px;
+}
+
+.stepEditorNumber {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: #e6f2e9;
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.stepEditorItem textarea {
+  min-height: 104px;
+  resize: vertical;
+}
+
+.stepEditorActions {
+  display: grid;
+  grid-template-columns: repeat(2, 34px);
+  gap: 6px;
+}
+
+.stepEditorActions button {
+  min-height: 32px;
+  border: 1px solid #d6ddd4;
+  border-radius: 8px;
+  background: white;
+  color: #556158;
+  font-weight: 900;
+}
+
+.stepEditorActions .stepEditorDelete {
+  grid-column: 1 / -1;
+  border-color: #efc5b7;
+  color: #a14d31;
+}
+
+.stepEditorEmpty {
+  margin: 0;
+  border: 1px dashed #d7dfd5;
+  border-radius: 11px;
+  padding: 12px;
+}
+
 .customTaskForm input,
 .customTaskForm select,
 .customTaskForm textarea {
@@ -2604,6 +2715,11 @@
 
 .drawerBackdrop {
   justify-items: end;
+}
+
+.drawerBackdrop:has(.taskDetailDrawer) {
+  place-items: center;
+  padding: 24px;
 }
 
 .drawer {
@@ -3671,6 +3787,57 @@
   --task-strong: #235f9d;
   --task-soft: #eaf4ff;
   --task-border: #a9c9e8;
+  width: min(820px, calc(100vw - 48px));
+  height: min(900px, calc(100dvh - 48px));
+  border-radius: 24px;
+  padding: 28px 32px 48px;
+  box-shadow: 0 30px 110px rgba(20, 30, 23, 0.3);
+}
+
+.taskDrawerActions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.drawerHeader .taskEditButton {
+  width: auto;
+  min-width: 92px;
+  height: 38px;
+  border-radius: 10px;
+  color: var(--green);
+  padding: 0 13px;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.drawerHeader .taskEditButton[aria-pressed="true"] {
+  border-color: #8ab49a;
+  background: var(--green-soft);
+}
+
+.taskDefinitionEditor {
+  margin: 16px 0 24px;
+  border: 1px solid #b9d2c1;
+  border-radius: 18px;
+  background: #f4faf5;
+  padding: 18px;
+}
+
+.taskDefinitionEditorHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.taskDefinitionEditorHeading h3 {
+  margin: 3px 0 0;
+}
+
+.taskDefinitionEditorHeading > span {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .taskThemeBlue {
@@ -6043,6 +6210,44 @@
 }
 
 @media (max-width: 620px) {
+  .drawerBackdrop:has(.taskDetailDrawer) {
+    place-items: stretch;
+    padding: 0;
+  }
+
+  .taskDetailDrawer {
+    width: 100%;
+    height: 100dvh;
+    border-radius: 0;
+    padding: 20px 16px 120px;
+  }
+
+  .taskDefinitionEditor {
+    padding: 14px;
+  }
+
+  .taskDefinitionEditorHeading,
+  .stepEditorHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .stepEditorHeader > button {
+    width: 100%;
+  }
+
+  .stepEditorItem {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .stepEditorActions {
+    grid-column: 2;
+    grid-template-columns: 36px 36px minmax(70px, auto);
+  }
+
+  .stepEditorActions .stepEditorDelete {
+    grid-column: auto;
+  }
   .shell,
   .main {
     width: 100%;
