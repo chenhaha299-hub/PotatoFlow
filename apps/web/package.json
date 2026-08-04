@@ -12,7 +12,7 @@
     "build": "vinext build && node scripts/normalize-wrangler.mjs",
     "start": "vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .sites-stage-*",
     "db:generate": "drizzle-kit generate",
     "test:e2e": "npm run build && node e2e/run-e2e.mjs",
     "test:e2e:direct": "playwright test"

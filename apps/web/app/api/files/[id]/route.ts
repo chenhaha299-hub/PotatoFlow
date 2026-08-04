@@ -4,10 +4,20 @@ import { getChatGPTUser } from "../../../chatgpt-auth";
 export const dynamic = "force-dynamic";
 
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = new Set(["pdf", "docx", "txt", "md"]);
+const ALLOWED_EXTENSIONS = new Set([
+  "pdf",
+  "docx",
+  "txt",
+  "md",
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+]);
 
 function safeFileId(value: string) {
-  return /^source-[a-zA-Z0-9-]+$/.test(value);
+  return /^(source|image)-[a-zA-Z0-9-]+$/.test(value);
 }
 
 function fileKey(userId: string, fileId: string) {

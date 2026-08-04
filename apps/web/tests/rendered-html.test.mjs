@@ -85,6 +85,10 @@ test("source files use account-scoped cloud storage", async () => {
   assert.match(route, /fileKey\(user\.userId, id\)/);
   assert.match(route, /env\.FILES/);
   assert.match(route, /MAX_FILE_BYTES/);
+  assert.match(route, /\^\(source\|image\)-/);
+  assert.match(route, /"jpeg"/);
+  assert.match(route, /"png"/);
+  assert.match(route, /"webp"/);
 });
 
 test("source keeps the app empty and local-first", async () => {
