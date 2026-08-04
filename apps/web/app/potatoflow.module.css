@@ -5351,6 +5351,130 @@
   padding: 12px;
 }
 
+.logicImageNotes {
+  display: grid;
+  gap: 11px;
+  border: 1px solid rgba(71, 111, 164, 0.2);
+  border-radius: 15px;
+  background: #f4f8fc;
+  padding: 12px;
+}
+
+.logicImageNotesHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.logicImageNotesHeader > span {
+  display: grid;
+  gap: 2px;
+}
+
+.logicImageNotesHeader strong {
+  font-size: 14px;
+}
+
+.logicImageNotesHeader small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.logicImageNotesHeader > label {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  border: 1px solid rgba(71, 111, 164, 0.28);
+  border-radius: 10px;
+  background: white;
+  color: #315f96;
+  padding: 0 9px;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.logicImageNotesHeader input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.logicUploadDisabled {
+  cursor: not-allowed !important;
+  opacity: 0.5;
+}
+
+.logicImageNotes > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.logicImageGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.logicImageGrid article {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(71, 111, 164, 0.16);
+  border-radius: 11px;
+  background: white;
+}
+
+.logicImagePreview {
+  display: grid;
+  width: 100%;
+  aspect-ratio: 1;
+  place-items: center;
+  overflow: hidden;
+  border: 0;
+  background: #eaf1f8;
+  color: #5c6e7d;
+  padding: 0;
+  font-size: 11px;
+}
+
+.logicImagePreview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.logicImageGrid article > div {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 3px 5px 3px 8px;
+}
+
+.logicImageGrid article > div small {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.logicImageGrid article > div button {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: #fbf2ed;
+  color: #a65339;
+  font-size: 16px;
+}
+
 .logicNodeFilesHeader {
   display: flex;
   align-items: center;

@@ -3,6 +3,7 @@
 import {
   PointerEvent as ReactPointerEvent,
   WheelEvent as ReactWheelEvent,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -17,6 +18,7 @@ export type IdeaNode = {
   y: number;
   childPageId?: string;
   sourceFiles?: IdeaSourceFile[];
+  imageNotes?: IdeaImageNote[];
   fresh?: boolean;
 };
 
@@ -27,6 +29,8 @@ export type IdeaSourceFile = {
   size: number;
   uploadedAt: string;
 };
+
+export type IdeaImageNote = IdeaSourceFile;
 
 export type IdeaEdge = {
   id: string;
@@ -174,6 +178,9 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [fileBusy, setFileBusy] = useState(false);
   const [fileError, setFileError] = useState("");
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState("");
+  const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
   const [transitionState, setTransitionState] = useState<"deeper" | "back" | "arrive" | null>(null);
   const [pageViewports, setPageViewports] = useState<Record<string, Viewport>>({});
 
@@ -211,6 +218,44 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   const selectedChildPage = selectedNode?.childPageId
     ? pages.find((page) => page.id === selectedNode.childPageId) || null
     : null;
+  const selectedImageNotes = useMemo(() => selectedNode?.imageNotes || [], [selectedNode?.imageNotes]);
+
+  useEffect(() => {
+    let disposed = false;
+    const objectUrls: string[] = [];
+    const images = selectedImageNotes;
+
+    async function loadImagePreviews() {
+      if (!images.length) {
+        setImagePreviews({});
+        return;
+      }
+      const entries = await Promise.all(
+        images.map(async (image) => {
+          let blob = await readGraphFile(image.id);
+          if (!blob && syncEnabled) {
+            blob = await readGraphFileFromCloud(image.id);
+            if (blob) {
+              await saveGraphFile(image.id, new File([blob], image.name, { type: blob.type }));
+            }
+          }
+          if (!blob) return null;
+          const url = URL.createObjectURL(blob);
+          objectUrls.push(url);
+          return [image.id, url] as const;
+        }),
+      );
+      if (!disposed) {
+        setImagePreviews(Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => Boolean(entry))));
+      }
+    }
+
+    void loadImagePreviews();
+    return () => {
+      disposed = true;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [selectedImageNotes, syncEnabled]);
 
   const topLevelPages = useMemo(() => pages.filter((page) => page.level === 1), [pages]);
 
@@ -344,7 +389,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
     const fileIds = pages
       .filter((page) => deletingIds.has(page.id))
       .flatMap((page) => page.nodes)
-      .flatMap((node) => node.sourceFiles || [])
+      .flatMap((node) => [...(node.sourceFiles || []), ...(node.imageNotes || [])])
       .map((file) => file.id);
     setPages((current) => current.filter((page) => !deletingIds.has(page.id)));
     setDeletePageId(null);
@@ -480,7 +525,10 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
         }, 420);
       }
       setConnectSourceId(null);
-      setSelectedNodeId(nodeId);
+      // Finishing a connection should return the user to the canvas. On a phone,
+      // keeping the target inspector open covers most of the graph and makes the
+      // next node impossible to tap without an extra close action.
+      setSelectedNodeId(null);
       return;
     }
     setSelectedEdgeId(null);
@@ -511,7 +559,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
     }
     const fileIds = [selectedNode, ...pages.filter((page) => childIds.has(page.id)).flatMap((page) => page.nodes)]
       .filter((node): node is IdeaNode => Boolean(node))
-      .flatMap((node) => node.sourceFiles || [])
+      .flatMap((node) => [...(node.sourceFiles || []), ...(node.imageNotes || [])])
       .map((file) => file.id);
     if (childIds.size > 0) {
       setPages((current) => current.filter((page) => !childIds.has(page.id)));
@@ -622,6 +670,81 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
     await Promise.allSettled([
       removeGraphFile(fileId),
       ...(syncEnabled ? [removeGraphFileFromCloud(fileId)] : []),
+    ]);
+  }
+
+  async function attachImagesToSelectedNode(fileList: FileList | null) {
+    if (!selectedNodeId || !fileList?.length) return;
+    setImageError("");
+    const existing = selectedNode?.imageNotes || [];
+    const remaining = 9 - existing.length;
+    if (remaining <= 0) {
+      setImageError("每个圆点最多添加 9 张图片备注。");
+      return;
+    }
+    const accepted = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
+    if (!accepted.length) {
+      setImageError("请选择 JPG、PNG、WebP、GIF 等图片文件。");
+      return;
+    }
+    const oversized = accepted.find((file) => file.size > 20 * 1024 * 1024);
+    if (oversized) {
+      setImageError(`“${oversized.name}”超过 20MB，无法添加。`);
+      return;
+    }
+    const uniqueFiles = accepted.filter(
+      (file) => !existing.some((item) => item.name === file.name && item.size === file.size),
+    );
+    const selectedFiles = uniqueFiles.slice(0, remaining);
+    if (!selectedFiles.length) return;
+    if (uniqueFiles.length > remaining) {
+      setImageError(`每个圆点最多 9 张，本次已添加前 ${remaining} 张。`);
+    }
+    try {
+      setImageBusy(true);
+      const additions: IdeaImageNote[] = [];
+      for (const file of selectedFiles) {
+        const metadata: IdeaImageNote = {
+          id: `image-${crypto.randomUUID()}`,
+          name: file.name,
+          type: file.type || "image/*",
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+        };
+        await saveGraphFile(metadata.id, file);
+        if (syncEnabled) await uploadGraphFileToCloud(metadata.id, file);
+        additions.push(metadata);
+      }
+      updateActivePage((page) => ({
+        ...page,
+        nodes: page.nodes.map((node) =>
+          node.id === selectedNodeId
+            ? { ...node, imageNotes: [...(node.imageNotes || []), ...additions] }
+            : node,
+        ),
+        updatedLabel: "刚刚更新",
+      }));
+    } catch (error) {
+      setImageError(error instanceof Error ? error.message : "图片备注保存失败，请重试。");
+    } finally {
+      setImageBusy(false);
+    }
+  }
+
+  async function removeImageNote(imageId: string) {
+    if (!selectedNodeId) return;
+    updateActivePage((page) => ({
+      ...page,
+      nodes: page.nodes.map((node) =>
+        node.id === selectedNodeId
+          ? { ...node, imageNotes: (node.imageNotes || []).filter((image) => image.id !== imageId) }
+          : node,
+      ),
+      updatedLabel: "刚刚更新",
+    }));
+    await Promise.allSettled([
+      removeGraphFile(imageId),
+      ...(syncEnabled ? [removeGraphFileFromCloud(imageId)] : []),
     ]);
   }
 
@@ -1074,21 +1197,65 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
                   <button aria-label="关闭想法详情" onClick={() => setSelectedNodeId(null)}>×</button>
                 </div>
                 <label>
-                  <span>圆点关键词（手动输入最多12字符）</span>
+                  <span>圆点关键词（手动输入最长30个字符）</span>
                   <input
                     value={selectedNode.label}
                     onChange={(event) => updateSelectedNode({
                       label: event.nativeEvent.isComposing
                         ? event.target.value
-                        : Array.from(event.target.value).slice(0, 12).join(""),
+                        : Array.from(event.target.value).slice(0, 30).join(""),
                     })}
-                    onCompositionEnd={(event) => updateSelectedNode({ label: Array.from(event.currentTarget.value).slice(0, 12).join("") })}
+                    onCompositionEnd={(event) => updateSelectedNode({ label: Array.from(event.currentTarget.value).slice(0, 30).join("") })}
                   />
                 </label>
                 <label>
                   <span>完整想法</span>
                   <textarea value={selectedNode.content} onChange={(event) => updateSelectedNode({ content: event.target.value })} />
                 </label>
+                <section className={styles.logicImageNotes}>
+                  <div className={styles.logicImageNotesHeader}>
+                    <span>
+                      <strong>图片备注</strong>
+                      <small>可放截图，最多 9 张</small>
+                    </span>
+                    <label className={imageBusy || (selectedNode.imageNotes || []).length >= 9 ? styles.logicUploadDisabled : ""}>
+                      ＋ 添加图片
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={imageBusy || (selectedNode.imageNotes || []).length >= 9}
+                        onChange={(event) => {
+                          attachImagesToSelectedNode(event.target.files);
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                  </div>
+                  {(selectedNode.imageNotes || []).length ? (
+                    <div className={styles.logicImageGrid}>
+                      {(selectedNode.imageNotes || []).map((image, index) => (
+                        <article key={image.id}>
+                          <button
+                            className={styles.logicImagePreview}
+                            onClick={() => imagePreviews[image.id] && window.open(imagePreviews[image.id], "_blank", "noopener,noreferrer")}
+                            disabled={!imagePreviews[image.id]}
+                            aria-label={`查看图片备注${index + 1}：${image.name}`}
+                          >
+                            {imagePreviews[image.id] ? <img src={imagePreviews[image.id]} alt={image.name} /> : <span>加载中</span>}
+                          </button>
+                          <div>
+                            <small>{index + 1}/9</small>
+                            <button aria-label={`删除图片备注${index + 1}`} onClick={() => removeImageNote(image.id)}>×</button>
+                          </div>
+                        </article>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>添加界面截图、灵感参考或过程记录，点击图片可放大查看。</p>
+                  )}
+                  {imageError && <p className={styles.logicFileError}>{imageError}</p>}
+                </section>
                 <section className={styles.logicNodeFiles}>
                   <div className={styles.logicNodeFilesHeader}>
                     <span><strong>相关源文件</strong><small>仅关联当前圆点</small></span>
@@ -1138,7 +1305,15 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
                   </div>
                 )}
                 <div className={styles.logicInspectorActions}>
-                  <button className={styles.primaryButton} onClick={() => setConnectSourceId(selectedNode.id)}>连接其他点</button>
+                  <button
+                    className={styles.primaryButton}
+                    onClick={() => {
+                      setConnectSourceId(selectedNode.id);
+                      setSelectedNodeId(null);
+                    }}
+                  >
+                    连接其他点
+                  </button>
                   <button className={styles.quietButton} onClick={deleteSelectedNode}>删除</button>
                 </div>
               </>
@@ -1178,14 +1353,14 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
               }} placeholder="可以输入一句完整的话，画布上只显示精简关键词。" autoFocus />
             </label>
             <label>
-              <span>圆点关键词（自动提取6字，手动输入最多12字符）</span>
+              <span>圆点关键词（自动提取6字，手动输入最长30个字符）</span>
               <input
                 value={ideaLabel}
                 onChange={(event) => {
                   setLabelEdited(true);
-                  setIdeaLabel(event.nativeEvent.isComposing ? event.target.value : Array.from(event.target.value).slice(0, 12).join(""));
+                  setIdeaLabel(event.nativeEvent.isComposing ? event.target.value : Array.from(event.target.value).slice(0, 30).join(""));
                 }}
-                onCompositionEnd={(event) => setIdeaLabel(Array.from(event.currentTarget.value).slice(0, 12).join(""))}
+                onCompositionEnd={(event) => setIdeaLabel(Array.from(event.currentTarget.value).slice(0, 30).join(""))}
                 placeholder="系统会自动截取，可修改"
               />
             </label>

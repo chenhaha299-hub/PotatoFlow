@@ -11,3 +11,7 @@ __pycache__/
 Thumbs.db
 .privacy-markers.local.txt
 *.log
+.sites/
+.sites-stage-*/
+apps/web/test-results/
+apps/web/playwright-report/

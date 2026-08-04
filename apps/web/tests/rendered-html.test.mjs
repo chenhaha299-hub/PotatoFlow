@@ -178,8 +178,10 @@ test("logic graph keeps automatic labels short and manual labels IME-safe", asyn
   );
 
   assert.match(graph, /slice\(0, 6\)/);
-  assert.match(graph, /slice\(0, 12\)/);
+  assert.match(graph, /slice\(0, 30\)/);
   assert.match(graph, /nativeEvent\.isComposing/);
   assert.match(graph, /logicGraphIdentity/);
-  assert.match(graph, /手动输入最多12字符/);
+  assert.match(graph, /手动输入最长30个字符/);
+  assert.match(graph, /图片备注/);
+  assert.match(graph, /最多 9 张/);
 });

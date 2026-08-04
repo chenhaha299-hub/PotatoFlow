@@ -1401,7 +1401,6 @@ export default function PotatoFlowApp({
   useEffect(() => {
     const stored = readStoredData();
     // Hydrate once from the browser-owned local store after SSR has finished.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (stored) setStore(stored);
     setHydrated(true);
   }, []);
@@ -1778,7 +1777,6 @@ export default function PotatoFlowApp({
   useEffect(() => {
     if (!selectedTaskId) {
       // Reset drafts when the user leaves the task workspace.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOrganizationDraft(null);
       setExecutionDraft(null);
       setOpenStepNoteIndex(null);
@@ -1817,7 +1815,6 @@ export default function PotatoFlowApp({
   useEffect(() => {
     if (planProject) {
       // A different project needs a fresh, independent editing session.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPlanUndoStack([]);
       planOperationKeyRef.current = null;
       setProjectEditDraft(null);
@@ -2078,7 +2075,6 @@ export default function PotatoFlowApp({
           };
   useEffect(() => {
     // Issue drafts are scoped to the issue the user explicitly opened.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIssueQuestionDraft(selectedIssue?.question || "");
     setIssueResponseDraft(selectedIssue?.response || "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2774,7 +2770,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     if (
       plan.import_metadata?.base_project_id &&
       targetProject &&
-      plan.import_metadata.base_project_id !== targetProject.id
+      plan.import_metadata.base_project_id !== targetProject.id &&
+      makeId("project", plan.import_metadata.base_project_id) !== targetProject.id
     ) {
       conflicts.push(
         "导入内容来自另一个项目 ID，不能直接覆盖当前项目。",
@@ -3976,6 +3973,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
         <nav className={styles.nav} aria-label="主要导航">
           {NAV_ITEMS.map((item) => (
             <button
+              aria-label={item.label}
               className={activeTab === item.id ? styles.navActive : ""}
               key={item.id}
               onClick={() => {
@@ -4546,6 +4544,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       <nav className={styles.mobileNav} aria-label="移动端导航">
         {NAV_ITEMS.map((item) => (
           <button
+            aria-label={item.mobileLabel || item.label}
             key={item.id}
             className={activeTab === item.id ? styles.mobileActive : ""}
             onClick={() => {
