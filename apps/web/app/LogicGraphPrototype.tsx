@@ -19,7 +19,13 @@ export type IdeaNode = {
   childPageId?: string;
   sourceFiles?: IdeaSourceFile[];
   imageNotes?: IdeaImageNote[];
+  supplementaryPoints?: IdeaSupplementaryPoint[];
   fresh?: boolean;
+};
+
+export type IdeaSupplementaryPoint = {
+  id: string;
+  text: string;
 };
 
 export type IdeaSourceFile = {
@@ -497,6 +503,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
       content: ideaContent.trim(),
       x: centerX + offset * 28,
       y: centerY + offset * 22,
+      supplementaryPoints: [{ id: uid("supplement"), text: "" }],
       fresh: true,
     };
     updateActivePage((page) => ({
@@ -556,7 +563,9 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
     setSelectedNodeId(nodeId);
   }
 
-  function updateSelectedNode(fields: Partial<Pick<IdeaNode, "label" | "content">>) {
+  function updateSelectedNode(
+    fields: Partial<Pick<IdeaNode, "label" | "content" | "supplementaryPoints">>,
+  ) {
     if (!selectedNodeId) return;
     updateActivePage((page) => ({
       ...page,
@@ -565,6 +574,39 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
       ),
       updatedLabel: "刚刚更新",
     }));
+  }
+
+  function currentSupplementaryPoints() {
+    if (!selectedNode) return [];
+    return selectedNode.supplementaryPoints?.length
+      ? selectedNode.supplementaryPoints
+      : [{ id: `supplement-${selectedNode.id}-initial`, text: "" }];
+  }
+
+  function updateSupplementaryPoint(id: string, text: string) {
+    updateSelectedNode({
+      supplementaryPoints: currentSupplementaryPoints().map((item) =>
+        item.id === id ? { ...item, text } : item,
+      ),
+    });
+  }
+
+  function addSupplementaryPoint() {
+    updateSelectedNode({
+      supplementaryPoints: [
+        ...currentSupplementaryPoints(),
+        { id: uid("supplement"), text: "" },
+      ],
+    });
+  }
+
+  function removeSupplementaryPoint(id: string) {
+    const remaining = currentSupplementaryPoints().filter((item) => item.id !== id);
+    updateSelectedNode({
+      supplementaryPoints: remaining.length
+        ? remaining
+        : [{ id: uid("supplement"), text: "" }],
+    });
   }
 
   async function deleteSelectedNode() {
@@ -1264,6 +1306,37 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
                   <span>完整想法</span>
                   <textarea value={selectedNode.content} onChange={(event) => updateSelectedNode({ content: event.target.value })} />
                 </label>
+                <section className={styles.logicSupplementaryPoints}>
+                  <div className={styles.logicSupplementaryHeader}>
+                    <span>
+                      <strong>想法补充</strong>
+                      <small>逐条记录后来想到的补充点</small>
+                    </span>
+                    <button type="button" onClick={addSupplementaryPoint}>＋ 新增</button>
+                  </div>
+                  <div className={styles.logicSupplementaryList}>
+                    {currentSupplementaryPoints().map((item, index) => (
+                      <div key={item.id}>
+                        <span>{String(index + 1).padStart(2, "0")}</span>
+                        <textarea
+                          aria-label={`想法补充 ${index + 1}`}
+                          value={item.text}
+                          placeholder="记录一个补充点……"
+                          onChange={(event) =>
+                            updateSupplementaryPoint(item.id, event.target.value)
+                          }
+                        />
+                        <button
+                          type="button"
+                          aria-label={`删除想法补充 ${index + 1}`}
+                          onClick={() => removeSupplementaryPoint(item.id)}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </section>
                 <section className={styles.logicImageNotes}>
                   <div className={styles.logicImageNotesHeader}>
                     <span>

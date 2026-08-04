@@ -1378,6 +1378,9 @@ export default function PotatoFlowApp({
       ],
     },
   ]);
+  const [collapsedNewProjectStages, setCollapsedNewProjectStages] = useState<
+    Record<string, boolean>
+  >({});
   const [exportOpen, setExportOpen] = useState(false);
   const [exportCopied, setExportCopied] = useState(false);
   const [exportScope, setExportScope] = useState<
@@ -3228,6 +3231,14 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     );
   }
 
+  function moveNewProjectStructureStage(stageId: string, direction: -1 | 1) {
+    setNewProjectStructureStages((current) => {
+      const index = current.findIndex((stage) => stage.id === stageId);
+      if (index < 0) return current;
+      return moveArrayItem(current, index, index + direction);
+    });
+  }
+
   function removeNewProjectStructureStage(stageId: string) {
     setNewProjectStructureStages((current) =>
       current.length === 1
@@ -3291,7 +3302,52 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     );
   }
 
+  function moveNewProjectStructureTask(
+    stageId: string,
+    taskId: string,
+    direction: -1 | 1,
+  ) {
+    setNewProjectStructureStages((current) =>
+      current.map((stage) => {
+        if (stage.id !== stageId) return stage;
+        const index = stage.tasks.findIndex((task) => task.id === taskId);
+        if (index < 0) return stage;
+        return {
+          ...stage,
+          tasks: moveArrayItem(stage.tasks, index, index + direction),
+        };
+      }),
+    );
+  }
+
+  function transferNewProjectStructureTask(
+    sourceStageId: string,
+    taskId: string,
+    targetStageId: string,
+  ) {
+    if (sourceStageId === targetStageId) return;
+    setNewProjectStructureStages((current) => {
+      const movingTask = current
+        .find((stage) => stage.id === sourceStageId)
+        ?.tasks.find((task) => task.id === taskId);
+      if (!movingTask) return current;
+      return current.map((stage) => {
+        if (stage.id === sourceStageId) {
+          return {
+            ...stage,
+            tasks: stage.tasks.filter((task) => task.id !== taskId),
+          };
+        }
+        if (stage.id === targetStageId) {
+          return { ...stage, tasks: [...stage.tasks, movingTask] };
+        }
+        return stage;
+      });
+    });
+  }
+
   function resetNewProjectStructureStages() {
+    setCollapsedNewProjectStages({});
     setNewProjectStructureStages([
       {
         id: `stage-draft-${crypto.randomUUID()}`,
@@ -5126,7 +5182,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     ? "导入项目"
                     : importMode === "backup"
                       ? "恢复完整备份"
-                      : "新建自定义任务"}
+                      : "手动创建项目或任务"}
                 </h2>
               </div>
               <button
@@ -5175,12 +5231,13 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   resetImportSources();
                   setCustomTaskDraft((current) => ({
                     ...current,
+                    projectId: NEW_PROJECT_OPTION,
                     startDate: current.startDate || selectedDate,
                     endDate: current.endDate || selectedDate,
                   }));
                 }}
               >
-                ＋ 自定义任务
+                ＋ 手动创建
               </button>
             </div>
 
@@ -5593,10 +5650,78 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             ) : (
               <>
                 <p className={styles.modalHint}>
-                  先确定总项目和项目阶段，再建立具体任务。没有确定时间的任务可以先放进“待安排”。
+                  先选择要创建的内容。总项目由多个可管理的项目阶段组成，每个阶段再包含具体任务。
                 </p>
+                <div className={styles.creationTypeTabs}>
+                  <button
+                    className={
+                      customTaskDraft.projectId === NEW_PROJECT_OPTION
+                        ? styles.creationTypeActive
+                        : ""
+                    }
+                    type="button"
+                    onClick={() =>
+                      setCustomTaskDraft((current) => ({
+                        ...current,
+                        projectId: NEW_PROJECT_OPTION,
+                      }))
+                    }
+                  >
+                    <strong>新建总项目</strong>
+                    <small>建立多个项目阶段和具体任务</small>
+                  </button>
+                  <button
+                    className={
+                      customTaskDraft.projectId !== NEW_PROJECT_OPTION &&
+                      customTaskDraft.projectId !== PERSONAL_PROJECT_ID
+                        ? styles.creationTypeActive
+                        : ""
+                    }
+                    type="button"
+                    disabled={
+                      store.projects.filter(
+                        (project) => project.id !== PERSONAL_PROJECT_ID,
+                      ).length === 0
+                    }
+                    onClick={() => {
+                      const firstProject = store.projects.find(
+                        (project) => project.id !== PERSONAL_PROJECT_ID,
+                      );
+                      if (firstProject) {
+                        setCustomTaskDraft((current) => ({
+                          ...current,
+                          projectId: firstProject.id,
+                          milestone: firstProject.milestones?.[0] || "",
+                        }));
+                      }
+                    }}
+                  >
+                    <strong>添加具体任务</strong>
+                    <small>加入已有总项目和项目阶段</small>
+                  </button>
+                  <button
+                    className={
+                      customTaskDraft.projectId === PERSONAL_PROJECT_ID
+                        ? styles.creationTypeActive
+                        : ""
+                    }
+                    type="button"
+                    onClick={() =>
+                      setCustomTaskDraft((current) => ({
+                        ...current,
+                        projectId: PERSONAL_PROJECT_ID,
+                        milestone: "",
+                      }))
+                    }
+                  >
+                    <strong>独立任务</strong>
+                    <small>不归属任何总项目或项目阶段</small>
+                  </button>
+                </div>
                 <div className={styles.customTaskForm}>
-                  <label>
+                  {customTaskDraft.projectId !== NEW_PROJECT_OPTION &&
+                    customTaskDraft.projectId !== PERSONAL_PROJECT_ID && (
+                  <label className={styles.customTaskWide}>
                     <span>归属总项目</span>
                     <select
                       value={customTaskDraft.projectId}
@@ -5607,12 +5732,6 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                         }))
                       }
                     >
-                      <option value={PERSONAL_PROJECT_ID}>
-                        个人任务（不归属现有项目）
-                      </option>
-                      <option value={NEW_PROJECT_OPTION}>
-                        ＋ 新建总项目
-                      </option>
                       {store.projects
                         .filter(
                           (project) => project.id !== PERSONAL_PROJECT_ID,
@@ -5624,6 +5743,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                         ))}
                     </select>
                   </label>
+                  )}
                   {customTaskDraft.projectId === NEW_PROJECT_OPTION && (
                     <>
                       <label>
@@ -5663,7 +5783,10 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           </button>
                         </div>
                         <div className={styles.newProjectStageList}>
-                          {newProjectStructureStages.map((stage, stageIndex) => (
+                          {newProjectStructureStages.map((stage, stageIndex) => {
+                            const stageCollapsed =
+                              collapsedNewProjectStages[stage.id] || false;
+                            return (
                             <section className={styles.newProjectStageCard} key={stage.id}>
                               <header>
                                 <span>阶段 {String(stageIndex + 1).padStart(2, "0")}</span>
@@ -5684,6 +5807,31 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                                 >
                                   ＋ 具体任务
                                 </button>
+                                <div className={styles.newProjectStageMoveActions}>
+                                  <button
+                                    type="button"
+                                    disabled={stageIndex === 0}
+                                    aria-label={`上移阶段 ${stageIndex + 1}`}
+                                    onClick={() =>
+                                      moveNewProjectStructureStage(stage.id, -1)
+                                    }
+                                  >
+                                    ↑
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={
+                                      stageIndex ===
+                                      newProjectStructureStages.length - 1
+                                    }
+                                    aria-label={`下移阶段 ${stageIndex + 1}`}
+                                    onClick={() =>
+                                      moveNewProjectStructureStage(stage.id, 1)
+                                    }
+                                  >
+                                    ↓
+                                  </button>
+                                </div>
                                 <button
                                   className={styles.newProjectStructureDelete}
                                   type="button"
@@ -5692,7 +5840,21 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                                 >
                                   删除阶段
                                 </button>
+                                <button
+                                  className={styles.newProjectStageCollapse}
+                                  type="button"
+                                  aria-expanded={!stageCollapsed}
+                                  onClick={() =>
+                                    setCollapsedNewProjectStages((current) => ({
+                                      ...current,
+                                      [stage.id]: !stageCollapsed,
+                                    }))
+                                  }
+                                >
+                                  {stageCollapsed ? "展开" : "折叠"}
+                                </button>
                               </header>
+                              {!stageCollapsed && (
                               <div className={styles.newProjectStructureTaskList}>
                                 {stage.tasks.length === 0 ? (
                                   <button
@@ -5798,6 +5960,65 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                                             }
                                           />
                                         </label>
+                                        {newProjectStructureStages.length > 1 && (
+                                          <label>
+                                            <span>移动到项目阶段</span>
+                                            <select
+                                              value={stage.id}
+                                              onChange={(event) =>
+                                                transferNewProjectStructureTask(
+                                                  stage.id,
+                                                  task.id,
+                                                  event.target.value,
+                                                )
+                                              }
+                                            >
+                                              {newProjectStructureStages.map(
+                                                (targetStage, targetIndex) => (
+                                                  <option
+                                                    key={targetStage.id}
+                                                    value={targetStage.id}
+                                                  >
+                                                    阶段 {String(targetIndex + 1).padStart(2, "0")}
+                                                    {targetStage.name
+                                                      ? ` · ${targetStage.name}`
+                                                      : " · 未命名"}
+                                                  </option>
+                                                ),
+                                              )}
+                                            </select>
+                                          </label>
+                                        )}
+                                        <div className={styles.newProjectTaskMoveActions}>
+                                          <button
+                                            type="button"
+                                            disabled={taskIndex === 0}
+                                            onClick={() =>
+                                              moveNewProjectStructureTask(
+                                                stage.id,
+                                                task.id,
+                                                -1,
+                                              )
+                                            }
+                                          >
+                                            ↑ 上移任务
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={
+                                              taskIndex === stage.tasks.length - 1
+                                            }
+                                            onClick={() =>
+                                              moveNewProjectStructureTask(
+                                                stage.id,
+                                                task.id,
+                                                1,
+                                              )
+                                            }
+                                          >
+                                            ↓ 下移任务
+                                          </button>
+                                        </div>
                                         <button
                                           className={styles.newProjectStructureDelete}
                                           type="button"
@@ -5815,8 +6036,10 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                                   ))
                                 )}
                               </div>
+                              )}
                             </section>
-                          ))}
+                            );
+                          })}
                         </div>
                       </section>
                     </>
@@ -5849,7 +6072,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       placeholder="说明这项任务最终要完成什么。"
                     />
                   </label>
-                  <label>
+                  {customTaskDraft.projectId !== PERSONAL_PROJECT_ID && <label>
                     <span>项目阶段</span>
                     <input
                       list="custom-task-milestones"
@@ -5878,9 +6101,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       ))}
                     </datalist>
                     <small className={styles.fieldHelp}>
-                      可选择已有阶段，也可以直接输入新阶段；阶段本身不需要勾选。
+                      选择具体任务归属的项目阶段，也可以直接输入新阶段名称。
                     </small>
-                  </label>
+                  </label>}
                   <label>
                     <span>为什么做</span>
                     <input
@@ -6687,28 +6910,32 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       )}
                       <div
                         className={styles.projectTaskSwipeSurface}
-                        onTouchStart={(event) => {
+                        onPointerDown={(event) => {
                           if (!projectEditDraft) return;
-                          const touch = event.touches[0];
-                          projectTaskSwipeStartRef.current = touch
-                            ? { x: touch.clientX, y: touch.clientY }
-                            : null;
+                          if (event.pointerType === "mouse" && event.button !== 0) return;
+                          projectTaskSwipeStartRef.current = {
+                            x: event.clientX,
+                            y: event.clientY,
+                          };
                         }}
-                        onTouchEnd={(event) => {
+                        onPointerUp={(event) => {
                           if (!projectEditDraft) return;
                           const start = projectTaskSwipeStartRef.current;
-                          const touch = event.changedTouches[0];
                           projectTaskSwipeStartRef.current = null;
-                          if (!start || !touch) return;
-                          const deltaX = touch.clientX - start.x;
-                          const deltaY = touch.clientY - start.y;
+                          if (!start) return;
+                          const deltaX = event.clientX - start.x;
+                          const deltaY = event.clientY - start.y;
                           if (
                             Math.abs(deltaX) < 55 ||
                             Math.abs(deltaX) < Math.abs(deltaY) * 1.3
                           ) {
                             return;
                           }
+                          event.preventDefault();
                           setSwipedProjectTaskId(deltaX < 0 ? task.id : null);
+                        }}
+                        onPointerCancel={() => {
+                          projectTaskSwipeStartRef.current = null;
                         }}
                       >
                       <details className={styles.projectTaskEditor}>
@@ -6724,6 +6951,19 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           <i>
                             {projectEditDraft ? "编辑任务" : "查看任务"}
                           </i>
+                          {projectEditDraft && (
+                            <button
+                              className={styles.projectTaskInlineDelete}
+                              type="button"
+                              onClick={(event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                confirmRemoveProjectTask(task);
+                              }}
+                            >
+                              删除任务
+                            </button>
+                          )}
                         </summary>
                         <div className={styles.projectTaskFields}>
                         <label className={styles.projectTaskWide}>

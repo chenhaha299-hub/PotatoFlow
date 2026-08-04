@@ -2784,6 +2784,41 @@
   grid-column: 1 / -1;
 }
 
+.creationTypeTabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.creationTypeTabs > button {
+  display: grid;
+  min-height: 74px;
+  gap: 4px;
+  border: 1px solid #ced9cc;
+  border-radius: 13px;
+  background: #fff;
+  color: var(--ink);
+  padding: 12px;
+  text-align: left;
+}
+
+.creationTypeTabs > button small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.creationTypeTabs > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.creationTypeTabs > .creationTypeActive {
+  border-color: var(--green);
+  background: var(--green-soft);
+  box-shadow: 0 0 0 2px rgba(31, 106, 73, 0.08);
+  color: var(--green);
+}
+
 .newProjectStructureBuilder {
   display: grid;
   gap: 14px;
@@ -2863,10 +2898,46 @@
 
 .newProjectStageCard > header {
   display: grid;
-  grid-template-columns: auto minmax(180px, 1fr) auto auto;
+  grid-template-columns: auto minmax(180px, 1fr) auto auto auto auto auto;
   border-bottom: 1px solid currentColor;
   border-color: color-mix(in srgb, #4f8bc9 35%, white);
   padding: 12px;
+}
+
+.newProjectStageMoveActions,
+.newProjectTaskMoveActions {
+  display: flex;
+  gap: 6px;
+}
+
+.newProjectStageMoveActions button {
+  min-width: 36px;
+  padding: 0 8px !important;
+}
+
+.newProjectStageMoveActions button:disabled,
+.newProjectTaskMoveActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.newProjectStageCollapse {
+  min-width: 54px;
+}
+
+.newProjectTaskMoveActions {
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.newProjectTaskMoveActions button {
+  min-height: 34px;
+  border: 1px solid #cfd9ce;
+  border-radius: 9px;
+  background: #fff;
+  color: #506057;
+  padding: 0 10px;
+  font-weight: 800;
 }
 
 .newProjectStageCard > header > span {
@@ -3681,12 +3752,30 @@
 
 .projectTaskEditor summary {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 11px;
   padding: 13px;
   cursor: pointer;
   list-style: none;
+}
+
+.projectTaskInlineDelete {
+  min-height: 34px;
+  border: 1px solid #e4b8a8;
+  border-radius: 9px;
+  background: #fff8f5;
+  color: #9a4526;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.projectTaskInlineDelete:hover,
+.projectTaskInlineDelete:focus-visible {
+  border-color: #c85f42;
+  background: #fff0e9;
+  outline: none;
 }
 
 .projectTaskEditor summary::-webkit-details-marker {
@@ -5933,6 +6022,89 @@
   padding: 12px;
 }
 
+.logicSupplementaryPoints {
+  display: grid;
+  gap: 11px;
+  border: 1px solid rgba(69, 132, 183, 0.24);
+  border-radius: 15px;
+  background: #f5f9fd;
+  padding: 12px;
+}
+
+.logicSupplementaryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.logicSupplementaryHeader > span {
+  display: grid;
+  gap: 2px;
+}
+
+.logicSupplementaryHeader strong {
+  color: #315f96;
+  font-size: 14px;
+}
+
+.logicSupplementaryHeader small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.logicSupplementaryHeader > button {
+  min-height: 34px;
+  border: 1px solid #a9c9e8;
+  border-radius: 10px;
+  background: #fff;
+  color: #286ba9;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.logicSupplementaryList {
+  display: grid;
+  gap: 8px;
+}
+
+.logicSupplementaryList > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 7px;
+}
+
+.logicSupplementaryList > div > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 9px;
+  background: #e5f0fb;
+  color: #315f96;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.logicSupplementaryList textarea {
+  min-height: 52px !important;
+  padding: 9px 10px !important;
+}
+
+.logicSupplementaryList > div > button {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid #e7c0b2;
+  border-radius: 9px;
+  background: #fff;
+  color: #a24b2d;
+  font-size: 18px;
+}
+
 .logicImageNotesHeader {
   display: flex;
   align-items: center;
@@ -7334,6 +7506,10 @@
     grid-column: 1;
   }
 
+  .creationTypeTabs {
+    grid-template-columns: 1fr;
+  }
+
   .newProjectStructureHeader,
   .newProjectStageCard > header {
     align-items: stretch;
@@ -7349,6 +7525,11 @@
 
   .newProjectStageCard > header button {
     width: 100%;
+  }
+
+  .newProjectStageMoveActions,
+  .newProjectTaskMoveActions {
+    grid-column: 1 / -1;
   }
 
   .newProjectStructureTaskFields {
