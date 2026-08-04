@@ -1886,13 +1886,16 @@ export default function PotatoFlowApp({
     ? store.projects.find((project) => project.id === selectedTask.project_id)
     : undefined;
   const selectedTaskMilestones = selectedProject
-    ? store.tasks
-        .filter((task) => task.project_id === selectedProject.id)
-        .reduce<string[]>((milestones, task) => {
-          const milestone = task.milestone?.trim() || "未分组任务";
-          if (!milestones.includes(milestone)) milestones.push(milestone);
-          return milestones;
-        }, [])
+    ? Array.from(
+        new Set(
+          [
+            ...(selectedProject.milestones || []),
+            ...store.tasks
+              .filter((task) => task.project_id === selectedProject.id)
+              .map((task) => task.milestone?.trim() || "未分组任务"),
+          ].filter(Boolean),
+        ),
+      )
     : [];
   const selectedTaskMilestone =
     selectedTask?.milestone?.trim() || "未分组任务";
@@ -2335,6 +2338,19 @@ export default function PotatoFlowApp({
       : null;
     updateStore((current) => ({
       ...current,
+      projects: current.projects.map((project) => {
+        if (project.id !== taskToSave.project_id) return project;
+        const milestone = taskToSave.milestone?.trim();
+        if (!milestone || (project.milestones || []).includes(milestone)) {
+          return project;
+        }
+        return {
+          ...project,
+          milestones: [...(project.milestones || []), milestone],
+          revision: (project.revision || 1) + 1,
+          updated_at: new Date().toISOString(),
+        };
+      }),
       tasks: current.tasks.map((task) => {
         if (task.id !== taskToSave.id) return task;
         const category =
@@ -6990,14 +7006,44 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                         </label>
                         <label>
                           <span>项目阶段</span>
-                          <input
-                            value={task.milestone || ""}
+                          <select
+                            aria-label={`选择“${task.title}”的项目阶段`}
+                            value={
+                              visibleMilestones.includes(task.milestone?.trim() || "")
+                                ? task.milestone?.trim()
+                                : "__new__"
+                            }
                             onChange={(event) =>
                               updateProjectTaskDraft(task.id, {
-                                milestone: event.target.value,
+                                milestone:
+                                  event.target.value === "__new__"
+                                    ? ""
+                                    : event.target.value,
                               })
                             }
-                          />
+                          >
+                            {visibleMilestones.map((milestone) => (
+                              <option key={milestone} value={milestone}>
+                                {milestone}
+                              </option>
+                            ))}
+                            <option value="__new__">＋ 新建阶段</option>
+                          </select>
+                          {!visibleMilestones.includes(task.milestone?.trim() || "") && (
+                            <input
+                              aria-label={`新建“${task.title}”的项目阶段`}
+                              placeholder="输入新阶段名称"
+                              value={task.milestone || ""}
+                              onChange={(event) =>
+                                updateProjectTaskDraft(task.id, {
+                                  milestone: event.target.value,
+                                })
+                              }
+                            />
+                          )}
+                          <small className={styles.fieldHelp}>
+                            可选择已有阶段，也可以直接输入新阶段名称。
+                          </small>
                         </label>
                         <label>
                           <span>预计时长（分钟）</span>
@@ -7829,12 +7875,49 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   </label>
                   <label>
                     <span>项目阶段</span>
-                    <input
-                      aria-label="编辑项目阶段"
-                      value={selectedTask.milestone || ""}
-                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, milestone: event.target.value } : task)}
-                    />
-                    <small className={styles.fieldHelp}>相同总项目中使用相同阶段名称的具体任务会归在一起。</small>
+                    <select
+                      aria-label="选择项目阶段"
+                      value={
+                        selectedTaskMilestones.includes(selectedTask.milestone?.trim() || "")
+                          ? selectedTask.milestone?.trim()
+                          : "__new__"
+                      }
+                      onChange={(event) =>
+                        setExecutionDraft((task) =>
+                          task
+                            ? {
+                                ...task,
+                                milestone:
+                                  event.target.value === "__new__"
+                                    ? ""
+                                    : event.target.value,
+                              }
+                            : task,
+                        )
+                      }
+                    >
+                      {selectedTaskMilestones.map((milestone) => (
+                        <option key={milestone} value={milestone}>
+                          {milestone}
+                        </option>
+                      ))}
+                      <option value="__new__">＋ 新建阶段</option>
+                    </select>
+                    {!selectedTaskMilestones.includes(selectedTask.milestone?.trim() || "") && (
+                      <input
+                        aria-label="新项目阶段名称"
+                        placeholder="输入新阶段名称"
+                        value={selectedTask.milestone || ""}
+                        onChange={(event) =>
+                          setExecutionDraft((task) =>
+                            task ? { ...task, milestone: event.target.value } : task,
+                          )
+                        }
+                      />
+                    )}
+                    <small className={styles.fieldHelp}>
+                      选择同一总项目中的已有阶段，或直接输入新阶段名称。保存后任务会归入对应阶段。
+                    </small>
                   </label>
                   <label className={styles.customTaskWide}>
                     <span>任务详情 / 要达成的结果</span>
