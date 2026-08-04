@@ -173,6 +173,8 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   const [labelEdited, setLabelEdited] = useState(false);
   const [newPageOpen, setNewPageOpen] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
+  const [editPageId, setEditPageId] = useState<string | null>(null);
+  const [editPageTitle, setEditPageTitle] = useState("");
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [deletePageId, setDeletePageId] = useState<string | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
@@ -381,6 +383,25 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   function requestDeletePage(pageId: string) {
     setDeletePageId(pageId);
     setDeleteConfirmText("");
+  }
+
+  function beginRenamePage(pageId: string) {
+    const page = pages.find((item) => item.id === pageId);
+    if (!page) return;
+    setEditPageId(pageId);
+    setEditPageTitle(page.title);
+  }
+
+  function savePageTitle() {
+    const title = editPageTitle.trim();
+    if (!editPageId || !title) return;
+    setPages((current) =>
+      current.map((page) =>
+        page.id === editPageId ? { ...page, title, updatedLabel: "刚刚更新" } : page,
+      ),
+    );
+    setEditPageId(null);
+    setEditPageTitle("");
   }
 
   async function confirmDeletePage() {
@@ -970,6 +991,13 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
                 <span className={styles.logicPageArrow}>→</span>
               </button>
               <button
+                className={styles.logicPageRename}
+                onClick={() => beginRenamePage(page.id)}
+                aria-label={`修改${page.title}的标题`}
+              >
+                修改标题
+              </button>
+              <button
                 className={styles.logicPageDelete}
                 onClick={() => requestDeletePage(page.id)}
                 aria-label={`删除${page.title}`}
@@ -992,6 +1020,30 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
               <div className={styles.logicDialogActions}>
                 <button className={styles.quietButton} onClick={() => setNewPageOpen(false)}>取消</button>
                 <button className={styles.primaryButton} onClick={createPage} disabled={!newPageTitle.trim()}>创建页面</button>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {editPageId && (
+          <div className={styles.logicOverlay} role="presentation" onMouseDown={() => setEditPageId(null)}>
+            <section className={styles.logicDialog} role="dialog" aria-modal="true" aria-labelledby="rename-graph-page" onMouseDown={(event) => event.stopPropagation()}>
+              <p className={styles.eyebrow}>RENAME PAGE</p>
+              <h3 id="rename-graph-page">修改网图标题</h3>
+              <label>
+                <span>标题名称</span>
+                <input
+                  aria-label="标题名称"
+                  value={editPageTitle}
+                  onChange={(event) => setEditPageTitle(event.target.value)}
+                  onKeyDown={(event) => event.key === "Enter" && savePageTitle()}
+                  maxLength={30}
+                  autoFocus
+                />
+              </label>
+              <div className={styles.logicDialogActions}>
+                <button className={styles.quietButton} onClick={() => setEditPageId(null)}>取消</button>
+                <button className={styles.primaryButton} onClick={savePageTitle} disabled={!editPageTitle.trim()}>保存标题</button>
               </div>
             </section>
           </div>

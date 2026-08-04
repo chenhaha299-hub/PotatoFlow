@@ -238,6 +238,11 @@ test("逻辑网图支持页面、圆点、连线、子网图和安全删除", as
   await page.getByRole("button", { name: "＋ 新建页面" }).click();
   await page.getByLabel("页面名称").fill("自动化验收");
   await page.getByRole("button", { name: "创建页面" }).click();
+  await page.getByRole("button", { name: "目录", exact: true }).click();
+  await page.getByRole("button", { name: "修改自动化验收的标题" }).click();
+  await page.getByLabel("标题名称").fill("自动化验收已改名");
+  await page.getByRole("button", { name: "保存标题" }).click();
+  await page.getByText("自动化验收已改名", { exact: true }).click();
   await page.getByRole("button", { name: "记录第一个想法" }).click();
   await page.getByLabel("完整想法").fill("这是一个用于验证自动标题截取和圆点详情的完整想法");
   await expect(page.getByLabel(/圆点关键词/)).toHaveValue("这是一个用于");
@@ -259,8 +264,8 @@ test("逻辑网图支持页面、圆点、连线、子网图和安全删除", as
   await expect(page.getByRole("button", { name: /查看图片备注2/ })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: /逻辑网图|网图/ }).click();
-  await page.getByText("自动化验收", { exact: true }).click();
-  await selectGraphNode(page, "自动化验收网图", "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
+  await page.getByText("自动化验收已改名", { exact: true }).click();
+  await selectGraphNode(page, "自动化验收已改名网图", "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
   await expect(page.getByRole("button", { name: /查看图片备注1/ })).toBeVisible();
   await page.getByRole("button", { name: "删除图片备注2" }).click();
   await expect(page.getByRole("button", { name: /查看图片备注2/ })).toHaveCount(0);
@@ -269,23 +274,23 @@ test("逻辑网图支持页面、圆点、连线、子网图和安全删除", as
   await page.getByPlaceholder("可以输入一句完整的话，画布上只显示精简关键词。").fill("第二个关联点");
   await page.getByRole("button", { name: "生成圆点" }).click();
   await page.getByRole("button", { name: "关闭想法详情" }).click();
-  await selectGraphNode(page, "自动化验收网图", "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
+  await selectGraphNode(page, "自动化验收已改名网图", "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
   await expect(page.getByRole("button", { name: "连接其他点" })).toBeVisible();
   await page.getByRole("button", { name: "连接其他点" }).click();
-  await selectGraphNode(page, "自动化验收网图", "第二个关联点");
+  await selectGraphNode(page, "自动化验收已改名网图", "第二个关联点");
 
-  await selectGraphNode(page, "自动化验收网图", "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
+  await selectGraphNode(page, "自动化验收已改名网图", "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
   await expect(page.getByRole("heading", { name: "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十" })).toBeVisible();
   await page.getByRole("button", { name: /为这个点建立子网图/ }).click();
   await expect(page.getByText("第 2 层网图", { exact: true })).toBeVisible();
   await page.locator("button:visible").filter({ hasText: "目录" }).first().click();
   await expect(page.locator("h2:visible", { hasText: "想法笔记本" })).toBeVisible();
 
-  await page.locator('button[aria-label="删除自动化验收"]:visible').click();
+  await page.locator('button[aria-label="删除自动化验收已改名"]:visible').click();
   await expect(page.locator('button:visible', { hasText: "永久删除" })).toBeDisabled();
   await page.getByLabel(/请输入“确认”/).fill("确认");
   await page.locator('button:visible', { hasText: "永久删除" }).dispatchEvent("click");
-  await expect(page.getByText("自动化验收", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("自动化验收已改名", { exact: true })).toHaveCount(0);
 });
 
 test("项目重复导入会被识别为无变化", async ({ page }) => {

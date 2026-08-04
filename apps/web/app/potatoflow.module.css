@@ -4783,9 +4783,31 @@
   transition: opacity 160ms ease, background 160ms ease;
 }
 
+.logicPageRename {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 58px;
+  border: 0;
+  border-radius: 8px;
+  background: #edf6f0;
+  color: var(--green);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 850;
+  opacity: 0;
+  transition: opacity 160ms ease, background 160ms ease;
+}
+
 .logicPageCard:hover .logicPageDelete,
+.logicPageCard:hover .logicPageRename,
+.logicPageRename:focus-visible,
 .logicPageDelete:focus-visible {
   opacity: 1;
+}
+
+.logicPageRename:hover {
+  background: #dfeee4;
 }
 
 .logicPageDelete:hover {
@@ -6164,6 +6186,12 @@
   .logicPageDelete {
     top: 7px;
     right: 8px;
+    opacity: 1;
+  }
+
+  .logicPageRename {
+    top: 7px;
+    right: 52px;
     opacity: 1;
   }
 
