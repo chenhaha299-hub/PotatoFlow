@@ -260,12 +260,42 @@ const DEFAULT_EXECUTION_TIPS = [
   "遇到阻碍就记录，不用重新解释项目背景。",
   "完成标准没有达到，就不急着标记完成。",
 ];
-const ONBOARDING_PROMPT =
-  "使用 $potatoflow 帮我创建一个新项目。请先检查当前会话是否已经安装并能识别 PotatoFlow Skill：如果无法识别，请停止建档，明确告诉我需要先安装 PotatoFlow Skill，并说明安装后重新打开 Codex 或新建任务再继续，不要降级成普通回答。确认 Skill 可用后，请分轮询问项目目标、成功标准、现有资源、限制条件、可用时间和周期任务。建档必须采用“项目→阶段→子任务→执行步骤”的结构：milestone 作为不勾选的阶段标题，task 作为主要完成单位，steps 只写完成子任务的实施流程，不要把每个操作拆成独立任务。执行时用户可逐项勾选步骤并添加独立备注，整项任务仍只需在底部统一汇报一次；新建 JSON 不要预填完成状态或执行记录。还要主动询问这个项目是否有需要随任务查看的 Word、PDF、Markdown 或文本源文件；如果有，继续确认是全部任务共用同一份或多份文件，还是每个任务分别对应不同文件，并在 JSON 中填写 source_file_mode、source_file_requirements 和每条任务的 source_file_refs。整理任务时，要逐项询问或确认每个任务是否需要备注；需要时把用户提供的提醒、补充背景或注意事项写入该任务的 note，不需要时留空，不要自行编造。先给我一份包含阶段结构、源文件关联方式和每条任务备注的项目建档摘要，等我回复“确认生成”后，再输出可导入 PotatoFlow 的 JSON。";
+const ONBOARDING_PROMPT = [
+  "使用 $potatoflow 帮助当前用户创建一个新项目。请先检查当前会话是否已经安装并能识别 PotatoFlow Skill：如果无法识别，请停止建档，明确提示需要先安装 PotatoFlow Skill，并说明安装后重新打开 Codex 或新建任务再继续，不要降级成普通回答。",
+  "",
+  "确认 Skill 可用后，请先发送以下建档方式选择，不要直接开始提问：",
+  "",
+  "欢迎使用 PotatoFlow。在创建项目之前，请先选择建档方式：",
+  "",
+  "A｜对话构思",
+  "适合只有初步想法、仍在思考方向的用户。AI 会逐步提问，帮助明确目标、分析可行性、整理项目结构并制定任务。",
+  "",
+  "B｜直接整理",
+  "适合已经有明确想法、现成文字或项目文档的用户。AI 会读取已有信息，只询问关键缺失内容，再整理成任务。",
+  "",
+  "C｜帮忙判断",
+  "AI 会先简单了解用户目前掌握的信息，再推荐更适合的建档方式，最终由用户确认。",
+  "",
+  "请回复：A、B 或 C。",
+  "",
+  "后续建档要高效：充分利用用户已经提供的信息，不重复询问；能合并判断的问题必须在同一轮一次问完，只有真正影响项目结构或排期的信息缺失时才继续追问。涉及发布或其他时效性任务时，统一询问：‘请说明任务计划在什么时候发布；如有多项任务，请分别填写各项任务的预计发布时间。若暂时无法确定，可标记为“以后再安排”。’不要逐项反复询问发布时间。",
+  "",
+  "建档采用“总项目→项目阶段→具体任务→执行步骤”的结构：milestone 是不勾选的项目阶段标题，task 是主要完成单位，steps 只写完成具体任务的实施流程，不要把每个操作拆成独立任务。用户可逐项勾选步骤并添加独立备注，整项任务只在底部统一汇报一次；新建 JSON 不要预填完成状态或执行记录。",
+  "",
+  "还要一次性确认项目是否需要 Word、PDF、Markdown 或文本源文件；如有，确认是全部任务共用文件，还是每个任务分别关联文件。任务备注也要合并成一份清单统一确认，不要逐条来回追问，不要自行编造。",
+  "",
+  "信息完整后，先输出简洁的项目建档摘要，包含目标、成功标准、阶段结构、具体任务、时间安排、源文件关联方式和任务备注；等待用户回复‘确认生成’后，再输出可导入 PotatoFlow 的 JSON。",
+].join("\n");
 const PERSONAL_PROJECT_ID = "project-personal-tasks";
 const NEW_PROJECT_OPTION = "__new_task_project__";
 
-type ScheduleType = "once" | "daily" | "weekdays" | "weekends" | "range";
+type ScheduleType =
+  | "backlog"
+  | "once"
+  | "daily"
+  | "weekdays"
+  | "weekends"
+  | "range";
 
 type CustomTaskDraft = {
   projectId: string;
@@ -284,6 +314,21 @@ type CustomTaskDraft = {
   estimatedMinutes: string;
   category: TaskCategory;
   priority: number;
+};
+
+type NewProjectStructureTaskDraft = {
+  id: string;
+  title: string;
+  objective: string;
+  scheduleType: "backlog" | "once";
+  scheduledDate: string;
+  estimatedMinutes: string;
+};
+
+type NewProjectStructureStageDraft = {
+  id: string;
+  name: string;
+  tasks: NewProjectStructureTaskDraft[];
 };
 
 type TabId = "today" | "calendar" | "projects" | "issues" | "logic-graph";
@@ -981,6 +1026,7 @@ function taskOccursOnDate(task: Task, dateValue: string) {
 }
 
 function taskScheduleType(task: Task): ScheduleType {
+  if (!task.scheduled_date) return "backlog";
   if (task.recurrence === "daily") return "daily";
   if (task.recurrence === "weekdays") return "weekdays";
   if (task.recurrence === "weekends") return "weekends";
@@ -1314,6 +1360,24 @@ export default function PotatoFlowApp({
     category: "work",
     priority: 3,
   });
+  const [newProjectStructureStages, setNewProjectStructureStages] = useState<
+    NewProjectStructureStageDraft[]
+  >([
+    {
+      id: "stage-draft-1",
+      name: "",
+      tasks: [
+        {
+          id: "task-draft-1",
+          title: "",
+          objective: "",
+          scheduleType: "backlog",
+          scheduledDate: localDate(),
+          estimatedMinutes: "30",
+        },
+      ],
+    },
+  ]);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportCopied, setExportCopied] = useState(false);
   const [exportScope, setExportScope] = useState<
@@ -1327,9 +1391,11 @@ export default function PotatoFlowApp({
   const [calendarMoveNotice, setCalendarMoveNotice] = useState<{
     taskId: string;
     taskTitle: string;
-    targetDate: string;
+    targetDate: string | null;
     previousScheduledDate: string | null;
     previousEndDate: string | null;
+    previousRecurrence: Task["recurrence"];
+    previousStatus: TaskStatus;
   } | null>(null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [selectedTaskDate, setSelectedTaskDate] = useState<string | null>(
@@ -1379,6 +1445,10 @@ export default function PotatoFlowApp({
   const [projectMilestoneBaseline, setProjectMilestoneBaseline] = useState("[]");
   const [newMilestoneName, setNewMilestoneName] = useState("");
   const [addingMilestone, setAddingMilestone] = useState(false);
+  const [collapsedProjectMilestones, setCollapsedProjectMilestones] = useState<
+    Record<string, boolean>
+  >({});
+  const collapsedProjectMilestonesLoadedRef = useRef(false);
   const [swipedProjectTaskId, setSwipedProjectTaskId] = useState<string | null>(null);
   const projectTaskSwipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [planUndoStack, setPlanUndoStack] = useState<PlanUndoSnapshot[]>([]);
@@ -1704,7 +1774,60 @@ export default function PotatoFlowApp({
       targetDate,
       previousScheduledDate: storedTask.scheduled_date,
       previousEndDate: storedTask.end_date,
+      previousRecurrence: storedTask.recurrence,
+      previousStatus: storedTask.status,
     });
+  }
+
+  function moveTaskToBacklog(taskId: string) {
+    const storedTask = store.tasks.find((task) => task.id === taskId);
+    if (!storedTask) return;
+    updateStore((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              scheduled_date: null,
+              end_date: null,
+              recurrence: null,
+              status: task.status === "done" ? "done" : "backlog",
+              paused: false,
+              revision: (task.revision || 1) + 1,
+              updated_at: new Date().toISOString(),
+            }
+          : task,
+      ),
+    }));
+    setCalendarMoveNotice({
+      taskId: storedTask.id,
+      taskTitle: storedTask.title,
+      targetDate: null,
+      previousScheduledDate: storedTask.scheduled_date,
+      previousEndDate: storedTask.end_date,
+      previousRecurrence: storedTask.recurrence,
+      previousStatus: storedTask.status,
+    });
+  }
+
+  function scheduleBacklogTask(taskId: string, targetDate: string) {
+    if (!targetDate) return;
+    updateStore((current) => ({
+      ...current,
+      tasks: current.tasks.map((task) =>
+        task.id === taskId
+          ? {
+              ...task,
+              scheduled_date: targetDate,
+              end_date: null,
+              recurrence: null,
+              status: task.status === "done" ? "done" : "scheduled",
+              revision: (task.revision || 1) + 1,
+              updated_at: new Date().toISOString(),
+            }
+          : task,
+      ),
+    }));
   }
 
   function undoCalendarMove() {
@@ -1718,6 +1841,8 @@ export default function PotatoFlowApp({
               ...task,
               scheduled_date: notice.previousScheduledDate,
               end_date: notice.previousEndDate,
+              recurrence: notice.previousRecurrence,
+              status: notice.previousStatus,
               revision: (task.revision || 1) + 1,
               updated_at: new Date().toISOString(),
             }
@@ -1952,6 +2077,35 @@ export default function PotatoFlowApp({
       (task) => (task.milestone?.trim() || "未分组任务") === milestone,
     ),
   }));
+  const projectMilestoneKey = (milestone: string) =>
+    `${selectedPlanProjectId || "unknown"}:${milestone}`;
+  const allProjectMilestonesCollapsed =
+    projectTaskGroups.length > 0 &&
+    projectTaskGroups.every(
+      (group) => collapsedProjectMilestones[projectMilestoneKey(group.milestone)],
+    );
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("potatoflow:collapsed-project-milestones");
+      if (stored) {
+        const parsed = JSON.parse(stored) as Record<string, boolean>;
+        setCollapsedProjectMilestones(parsed);
+      }
+    } catch {
+      // A damaged UI preference must never prevent the project from opening.
+    } finally {
+      collapsedProjectMilestonesLoadedRef.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!collapsedProjectMilestonesLoadedRef.current) return;
+    localStorage.setItem(
+      "potatoflow:collapsed-project-milestones",
+      JSON.stringify(collapsedProjectMilestones),
+    );
+  }, [collapsedProjectMilestones]);
 
   const todayTasks = useMemo(
     () =>
@@ -3057,6 +3211,208 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     }
   }
 
+  function addNewProjectStructureStage() {
+    setNewProjectStructureStages((current) => [
+      ...current,
+      {
+        id: `stage-draft-${crypto.randomUUID()}`,
+        name: "",
+        tasks: [],
+      },
+    ]);
+  }
+
+  function updateNewProjectStructureStage(stageId: string, name: string) {
+    setNewProjectStructureStages((current) =>
+      current.map((stage) => (stage.id === stageId ? { ...stage, name } : stage)),
+    );
+  }
+
+  function removeNewProjectStructureStage(stageId: string) {
+    setNewProjectStructureStages((current) =>
+      current.length === 1
+        ? current
+        : current.filter((stage) => stage.id !== stageId),
+    );
+  }
+
+  function addNewProjectStructureTask(stageId: string) {
+    setNewProjectStructureStages((current) =>
+      current.map((stage) =>
+        stage.id === stageId
+          ? {
+              ...stage,
+              tasks: [
+                ...stage.tasks,
+                {
+                  id: `task-draft-${crypto.randomUUID()}`,
+                  title: "",
+                  objective: "",
+                  scheduleType: "backlog",
+                  scheduledDate: localDate(),
+                  estimatedMinutes: "30",
+                },
+              ],
+            }
+          : stage,
+      ),
+    );
+  }
+
+  function updateNewProjectStructureTask(
+    stageId: string,
+    taskId: string,
+    patch: Partial<NewProjectStructureTaskDraft>,
+  ) {
+    setNewProjectStructureStages((current) =>
+      current.map((stage) =>
+        stage.id === stageId
+          ? {
+              ...stage,
+              tasks: stage.tasks.map((task) =>
+                task.id === taskId ? { ...task, ...patch } : task,
+              ),
+            }
+          : stage,
+      ),
+    );
+  }
+
+  function removeNewProjectStructureTask(stageId: string, taskId: string) {
+    setNewProjectStructureStages((current) =>
+      current.map((stage) =>
+        stage.id === stageId
+          ? {
+              ...stage,
+              tasks: stage.tasks.filter((task) => task.id !== taskId),
+            }
+          : stage,
+      ),
+    );
+  }
+
+  function resetNewProjectStructureStages() {
+    setNewProjectStructureStages([
+      {
+        id: `stage-draft-${crypto.randomUUID()}`,
+        name: "",
+        tasks: [
+          {
+            id: `task-draft-${crypto.randomUUID()}`,
+            title: "",
+            objective: "",
+            scheduleType: "backlog",
+            scheduledDate: localDate(),
+            estimatedMinutes: "30",
+          },
+        ],
+      },
+    ]);
+  }
+
+  function createNewProjectStructure() {
+    setImportError("");
+    const projectName = customTaskDraft.newProjectName.trim();
+    if (!projectName) {
+      setImportError("请填写总项目名称。");
+      return;
+    }
+    const stages = newProjectStructureStages.map((stage) => ({
+      ...stage,
+      name: stage.name.trim(),
+      tasks: stage.tasks.map((task) => ({
+        ...task,
+        title: task.title.trim(),
+        objective: task.objective.trim(),
+      })),
+    }));
+    if (stages.some((stage) => !stage.name)) {
+      setImportError("请填写每个项目阶段的名称。");
+      return;
+    }
+    if (stages.some((stage) => stage.tasks.length === 0)) {
+      setImportError("每个项目阶段至少需要一项具体任务。");
+      return;
+    }
+    if (stages.some((stage) => stage.tasks.some((task) => !task.title))) {
+      setImportError("请填写每项具体任务的标题。");
+      return;
+    }
+    const createdAt = new Date().toISOString();
+    const projectId = `project-${crypto.randomUUID()}`;
+    const tasks: Task[] = stages.flatMap((stage) =>
+      stage.tasks.map((task) => {
+        const isBacklog = task.scheduleType === "backlog";
+        const minutes = Number(task.estimatedMinutes);
+        return {
+          id: `task-${crypto.randomUUID()}`,
+          project_id: projectId,
+          parent_id: null,
+          milestone: stage.name,
+          title: task.title,
+          objective: task.objective || task.title,
+          why: "",
+          note: "",
+          result_report: "",
+          steps: [],
+          acceptance_criteria: [`完成“${task.title}”并记录结果`],
+          scheduled_date: isBacklog ? null : task.scheduledDate,
+          end_date: null,
+          recurrence: null,
+          occurrence_results: {},
+          estimated_minutes: minutes > 0 ? minutes : 30,
+          priority: 3,
+          dependencies: [],
+          category: "work",
+          status: isBacklog ? "backlog" : "scheduled",
+          created_at: createdAt,
+          revision: 1,
+          updated_at: createdAt,
+          revision_history: [],
+          notes: [],
+          step_results: [],
+          step_reports: [],
+          criterion_results: [false],
+        };
+      }),
+    );
+    const project: Project = {
+      id: projectId,
+      name: projectName,
+      objective:
+        customTaskDraft.newProjectObjective.trim() ||
+        `管理“${projectName}”相关任务。`,
+      success_criteria: [],
+      background: "",
+      constraints: [],
+      assumptions: [],
+      execution_improvements: "",
+      execution_tip_title: DEFAULT_EXECUTION_TIP_TITLE,
+      execution_tips: DEFAULT_EXECUTION_TIPS,
+      milestones: stages.map((stage) => stage.name),
+      status: "active",
+      created_at: createdAt,
+      source_files: [],
+      revision: 1,
+      updated_at: createdAt,
+    };
+    updateStore((current) => ({
+      ...current,
+      projects: [...current.projects, project],
+      tasks: [...current.tasks, ...tasks],
+    }));
+    setActiveTab("projects");
+    setSelectedPlanProjectId(projectId);
+    setImportOpen(false);
+    setCustomTaskDraft((current) => ({
+      ...current,
+      projectId: PERSONAL_PROJECT_ID,
+      newProjectName: "",
+      newProjectObjective: "",
+    }));
+    resetNewProjectStructureStages();
+  }
+
   function createCustomTask() {
     setImportError("");
     const title = customTaskDraft.title.trim();
@@ -3085,25 +3441,31 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       : createsNewProject
         ? `project-${crypto.randomUUID()}`
         : customTaskDraft.projectId;
-    const startDate = customTaskDraft.startDate;
+    const isBacklog = customTaskDraft.scheduleType === "backlog";
+    const startDate = isBacklog ? null : customTaskDraft.startDate;
     const endDate =
-      customTaskDraft.scheduleType === "once"
+      isBacklog
+        ? null
+        : customTaskDraft.scheduleType === "once"
         ? startDate
         : customTaskDraft.endDate;
-    if (!startDate || !endDate || endDate < startDate) {
+    if (!isBacklog && (!startDate || !endDate || endDate < startDate)) {
       setImportError("请填写正确的开始和结束日期。");
       return;
     }
-    const start = new Date(`${startDate}T12:00:00`);
-    const end = new Date(`${endDate}T12:00:00`);
-    const days =
-      Math.round((end.getTime() - start.getTime()) / 86400000) + 1;
+    const start = startDate ? new Date(`${startDate}T12:00:00`) : null;
+    const end = endDate ? new Date(`${endDate}T12:00:00`) : null;
+    const days = start && end
+      ? Math.round((end.getTime() - start.getTime()) / 86400000) + 1
+      : 0;
     if (days > 366) {
       setImportError("单次最多创建一年范围内的任务，请缩短日期范围。");
       return;
     }
-    const occurrenceDates: string[] = [];
-    if (
+    const occurrenceDates: Array<string | null> = [];
+    if (isBacklog) {
+      occurrenceDates.push(null);
+    } else if (
       customTaskDraft.scheduleType === "once" ||
       customTaskDraft.scheduleType === "range"
     ) {
@@ -3147,7 +3509,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       priority: customTaskDraft.priority,
       dependencies: [],
       category: customTaskDraft.category,
-      status: "scheduled",
+      status: dateValue ? "scheduled" : "backlog",
       created_at: createdAt,
       revision: 1,
       updated_at: createdAt,
@@ -3209,8 +3571,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
         tasks: [...current.tasks, ...tasks],
       };
     });
-    setSelectedDate(startDate);
-    setActiveTab("today");
+    setSelectedDate(startDate || selectedDate);
+    setActiveTab(isBacklog ? "projects" : "today");
     setImportOpen(false);
     setCustomTaskDraft({
       projectId: PERSONAL_PROJECT_ID,
@@ -3224,8 +3586,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       steps: [],
       acceptanceCriteria: "",
       scheduleType: "once",
-      startDate,
-      endDate: startDate,
+      startDate: startDate || localDate(),
+      endDate: startDate || localDate(),
       estimatedMinutes: "30",
       category: "work",
       priority: 3,
@@ -3472,6 +3834,16 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
 
   function updateProjectTaskSchedule(task: Task, scheduleType: ScheduleType) {
     const startDate = task.scheduled_date || localDate();
+    if (scheduleType === "backlog") {
+      updateProjectTaskDraft(task.id, {
+        scheduled_date: null,
+        end_date: null,
+        recurrence: null,
+        status: task.status === "done" ? "done" : "backlog",
+        paused: false,
+      });
+      return;
+    }
     if (scheduleType === "once") {
       const occurrence = task.occurrence_results?.[startDate];
       updateProjectTaskDraft(task.id, {
@@ -3554,7 +3926,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       (task) => (task.milestone?.trim() || "未分组任务") === milestone,
     );
     const message = milestoneTasks.length
-      ? `“${milestone}”中有 ${milestoneTasks.length} 项子任务。删除阶段会同时删除这些子任务，保存后无法恢复。确定继续吗？`
+      ? `“${milestone}”中有 ${milestoneTasks.length} 项具体任务。删除阶段会同时删除这些任务，保存后无法恢复。确定继续吗？`
       : `确定删除空阶段“${milestone}”吗？`;
     if (!window.confirm(message)) return;
     checkpointPlanOperation(`remove-milestone:${milestone}`);
@@ -3579,7 +3951,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
         project_id: planProject.id,
         parent_id: null,
         milestone,
-        title: "未命名子任务",
+        title: "未命名具体任务",
         objective: "填写这项任务需要达成的结果。",
         why: "",
         note: "",
@@ -3614,7 +3986,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
 
   function confirmRemoveProjectTask(task: Task) {
     if (
-      window.confirm(`确定删除“${task.title || "未命名子任务"}”吗？保存项目后将无法恢复。`)
+      window.confirm(`确定删除“${task.title || "未命名具体任务"}”吗？保存项目后将无法恢复。`)
     ) {
       removeProjectTaskDraft(task.id);
     }
@@ -4501,6 +4873,67 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 action={() => setImportOpen(true)}
               />
             ) : (
+              <>
+              <section className={styles.pendingScheduleBoard}>
+                <div className={styles.pendingScheduleHeader}>
+                  <div>
+                    <p className={styles.eyebrow}>待安排任务</p>
+                    <h2>先保留任务，确定时间后再进入日历</h2>
+                  </div>
+                  <strong>
+                    {store.tasks.filter(
+                      (task) =>
+                        !task.scheduled_date &&
+                        task.status !== "done" &&
+                        task.status !== "cancelled",
+                    ).length}
+                  </strong>
+                </div>
+                <div className={styles.pendingScheduleList}>
+                  {store.tasks.filter(
+                    (task) =>
+                      !task.scheduled_date &&
+                      task.status !== "done" &&
+                      task.status !== "cancelled",
+                  ).length === 0 ? (
+                    <p>当前没有待安排任务。</p>
+                  ) : (
+                    store.tasks
+                      .filter(
+                        (task) =>
+                          !task.scheduled_date &&
+                          task.status !== "done" &&
+                          task.status !== "cancelled",
+                      )
+                      .map((task) => {
+                        const project = store.projects.find(
+                          (item) => item.id === task.project_id,
+                        );
+                        return (
+                          <article key={task.id}>
+                            <button onClick={() => openTask(task.id)}>
+                              <small>
+                                {project?.name || "个人任务"}
+                                {task.milestone ? ` · ${task.milestone}` : ""}
+                              </small>
+                              <strong>{task.title}</strong>
+                            </button>
+                            <label>
+                              <span>安排日期</span>
+                              <input
+                                type="date"
+                                aria-label={`为“${task.title}”安排日期`}
+                                onChange={(event) =>
+                                  scheduleBacklogTask(task.id, event.target.value)
+                                }
+                              />
+                            </label>
+                          </article>
+                        );
+                      })
+                  )}
+                </div>
+              </section>
               <div className={styles.projectGrid}>
                 {store.projects.map((project) => {
                   const tasks = store.tasks.filter(
@@ -4508,6 +4941,18 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   );
                   const done = tasks.filter(
                     (task) => taskOverallCompletion(task) === 100,
+                  ).length;
+                  const pending = tasks.filter(
+                    (task) =>
+                      !task.scheduled_date &&
+                      task.status !== "done" &&
+                      task.status !== "cancelled",
+                  ).length;
+                  const scheduled = tasks.filter(
+                    (task) =>
+                      Boolean(task.scheduled_date) &&
+                      task.status !== "done" &&
+                      task.status !== "cancelled",
                   ).length;
                   const progress = tasks.length
                     ? Math.round(
@@ -4531,6 +4976,12 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       </div>
                       <h2>{project.name}</h2>
                       <p>{project.objective}</p>
+                      <div className={styles.projectStats}>
+                        <span><b>{tasks.length}</b> 总任务</span>
+                        <span><b>{scheduled}</b> 已安排</span>
+                        <span><b>{pending}</b> 待安排</span>
+                        <span><b>{done}</b> 已完成</span>
+                      </div>
                       <button
                         className={styles.projectOpenButton}
                         onClick={() => setSelectedPlanProjectId(project.id)}
@@ -4561,6 +5012,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                               <small>
                                 {taskOverallCompletion(task) === 100
                                   ? "已完成"
+                                  : !task.scheduled_date
+                                    ? "待安排"
                                   : `${taskOverallCompletion(task)}%`}
                               </small>
                             </button>
@@ -4579,6 +5032,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   );
                 })}
               </div>
+              </>
             )}
           </section>
         )}
@@ -5139,11 +5593,11 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             ) : (
               <>
                 <p className={styles.modalHint}>
-                  填写下面的任务模板。创建后会自动跳转到任务日期，并显示在首页。
+                  先确定总项目和项目阶段，再建立具体任务。没有确定时间的任务可以先放进“待安排”。
                 </p>
                 <div className={styles.customTaskForm}>
                   <label>
-                    <span>归属项目</span>
+                    <span>归属总项目</span>
                     <select
                       value={customTaskDraft.projectId}
                       onChange={(event) =>
@@ -5157,7 +5611,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                         个人任务（不归属现有项目）
                       </option>
                       <option value={NEW_PROJECT_OPTION}>
-                        ＋ 新建任务项目
+                        ＋ 新建总项目
                       </option>
                       {store.projects
                         .filter(
@@ -5198,10 +5652,179 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           placeholder="说明这个项目希望达成的总体结果。"
                         />
                       </label>
+                      <section className={`${styles.newProjectStructureBuilder} ${styles.customTaskWide}`}>
+                        <div className={styles.newProjectStructureHeader}>
+                          <div>
+                            <strong>项目结构</strong>
+                            <small>先建立多个项目阶段，再给每个阶段添加具体任务。</small>
+                          </div>
+                          <button type="button" onClick={addNewProjectStructureStage}>
+                            ＋ 新增阶段
+                          </button>
+                        </div>
+                        <div className={styles.newProjectStageList}>
+                          {newProjectStructureStages.map((stage, stageIndex) => (
+                            <section className={styles.newProjectStageCard} key={stage.id}>
+                              <header>
+                                <span>阶段 {String(stageIndex + 1).padStart(2, "0")}</span>
+                                <input
+                                  aria-label={`阶段 ${stageIndex + 1} 名称`}
+                                  value={stage.name}
+                                  onChange={(event) =>
+                                    updateNewProjectStructureStage(
+                                      stage.id,
+                                      event.target.value,
+                                    )
+                                  }
+                                  placeholder="例如：内容准备"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => addNewProjectStructureTask(stage.id)}
+                                >
+                                  ＋ 具体任务
+                                </button>
+                                <button
+                                  className={styles.newProjectStructureDelete}
+                                  type="button"
+                                  disabled={newProjectStructureStages.length === 1}
+                                  onClick={() => removeNewProjectStructureStage(stage.id)}
+                                >
+                                  删除阶段
+                                </button>
+                              </header>
+                              <div className={styles.newProjectStructureTaskList}>
+                                {stage.tasks.length === 0 ? (
+                                  <button
+                                    className={styles.newProjectEmptyTaskButton}
+                                    type="button"
+                                    onClick={() => addNewProjectStructureTask(stage.id)}
+                                  >
+                                    ＋ 添加这个阶段的第一项具体任务
+                                  </button>
+                                ) : (
+                                  stage.tasks.map((task, taskIndex) => (
+                                    <details
+                                      className={styles.newProjectStructureTask}
+                                      key={task.id}
+                                      open={!task.title}
+                                    >
+                                      <summary>
+                                        <span>{String(taskIndex + 1).padStart(2, "0")}</span>
+                                        <strong>{task.title || "未命名具体任务"}</strong>
+                                        <small>
+                                          {task.scheduleType === "backlog"
+                                            ? "待安排"
+                                            : task.scheduledDate}
+                                        </small>
+                                      </summary>
+                                      <div className={styles.newProjectStructureTaskFields}>
+                                        <label>
+                                          <span>具体任务 *</span>
+                                          <input
+                                            value={task.title}
+                                            onChange={(event) =>
+                                              updateNewProjectStructureTask(
+                                                stage.id,
+                                                task.id,
+                                                { title: event.target.value },
+                                              )
+                                            }
+                                            placeholder="例如：完成第一版拍摄"
+                                          />
+                                        </label>
+                                        <label>
+                                          <span>要达成的结果</span>
+                                          <textarea
+                                            value={task.objective}
+                                            onChange={(event) =>
+                                              updateNewProjectStructureTask(
+                                                stage.id,
+                                                task.id,
+                                                { objective: event.target.value },
+                                              )
+                                            }
+                                            placeholder="说明完成后应该得到什么结果。"
+                                          />
+                                        </label>
+                                        <label>
+                                          <span>时间安排</span>
+                                          <select
+                                            value={task.scheduleType}
+                                            onChange={(event) =>
+                                              updateNewProjectStructureTask(
+                                                stage.id,
+                                                task.id,
+                                                {
+                                                  scheduleType: event.target.value as
+                                                    | "backlog"
+                                                    | "once",
+                                                },
+                                              )
+                                            }
+                                          >
+                                            <option value="backlog">以后再安排</option>
+                                            <option value="once">安排日期</option>
+                                          </select>
+                                        </label>
+                                        {task.scheduleType === "once" && (
+                                          <label>
+                                            <span>任务日期</span>
+                                            <input
+                                              type="date"
+                                              value={task.scheduledDate}
+                                              onChange={(event) =>
+                                                updateNewProjectStructureTask(
+                                                  stage.id,
+                                                  task.id,
+                                                  { scheduledDate: event.target.value },
+                                                )
+                                              }
+                                            />
+                                          </label>
+                                        )}
+                                        <label>
+                                          <span>预计用时（分钟）</span>
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            value={task.estimatedMinutes}
+                                            onChange={(event) =>
+                                              updateNewProjectStructureTask(
+                                                stage.id,
+                                                task.id,
+                                                { estimatedMinutes: event.target.value },
+                                              )
+                                            }
+                                          />
+                                        </label>
+                                        <button
+                                          className={styles.newProjectStructureDelete}
+                                          type="button"
+                                          onClick={() =>
+                                            removeNewProjectStructureTask(
+                                              stage.id,
+                                              task.id,
+                                            )
+                                          }
+                                        >
+                                          删除具体任务
+                                        </button>
+                                      </div>
+                                    </details>
+                                  ))
+                                )}
+                              </div>
+                            </section>
+                          ))}
+                        </div>
+                      </section>
                     </>
                   )}
+                  {customTaskDraft.projectId !== NEW_PROJECT_OPTION && (
+                  <>
                   <label>
-                    <span>任务标题 *</span>
+                    <span>具体任务 *</span>
                     <input
                       value={customTaskDraft.title}
                       onChange={(event) =>
@@ -5227,8 +5850,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     />
                   </label>
                   <label>
-                    <span>任务分块 / 里程碑</span>
+                    <span>项目阶段</span>
                     <input
+                      list="custom-task-milestones"
                       value={customTaskDraft.milestone}
                       onChange={(event) =>
                         setCustomTaskDraft((current) => ({
@@ -5236,10 +5860,25 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           milestone: event.target.value,
                         }))
                       }
-                      placeholder="例如：内容准备"
+                      placeholder="例如：首条口播视频"
                     />
+                    <datalist id="custom-task-milestones">
+                      {Array.from(
+                        new Set(
+                          store.tasks
+                            .filter(
+                              (task) =>
+                                task.project_id === customTaskDraft.projectId &&
+                                task.milestone?.trim(),
+                            )
+                            .map((task) => task.milestone?.trim() || ""),
+                        ),
+                      ).map((milestone) => (
+                        <option key={milestone} value={milestone} />
+                      ))}
+                    </datalist>
                     <small className={styles.fieldHelp}>
-                      同一项目中填写相同名称的任务会自动归在同一阶段，例如“第一阶段｜内容准备”。
+                      可选择已有阶段，也可以直接输入新阶段；阶段本身不需要勾选。
                     </small>
                   </label>
                   <label>
@@ -5323,6 +5962,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                         }))
                       }
                     >
+                      <option value="backlog">以后再安排</option>
                       <option value="once">一次性任务</option>
                       <option value="daily">每天</option>
                       <option value="weekdays">每个工作日</option>
@@ -5330,7 +5970,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       <option value="range">持续一段时间</option>
                     </select>
                   </label>
-                  <label>
+                  {customTaskDraft.scheduleType !== "backlog" && <label>
                     <span>
                       {customTaskDraft.scheduleType === "once"
                         ? "任务日期"
@@ -5350,8 +5990,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                         }))
                       }
                     />
-                  </label>
-                  {customTaskDraft.scheduleType !== "once" && (
+                  </label>}
+                  {customTaskDraft.scheduleType !== "once" && customTaskDraft.scheduleType !== "backlog" && (
                     <label>
                       <span>结束日期</span>
                       <input
@@ -5375,7 +6015,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   <p
                     className={`${styles.scheduleDescription} ${styles.customTaskWide}`}
                   >
-                    {customTaskDraft.scheduleType === "range"
+                    {customTaskDraft.scheduleType === "backlog"
+                      ? "暂不进入首页和日历，之后可在项目页面直接安排日期。"
+                      : customTaskDraft.scheduleType === "range"
                       ? "持续任务会在起止日期内每天显示，并共享同一份完成进度。"
                       : customTaskDraft.scheduleType === "once"
                         ? "一次性任务只创建一条记录。"
@@ -5433,6 +6075,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       ))}
                     </select>
                   </label>
+                  </>
+                  )}
                 </div>
                 {importError && <p className={styles.error}>{importError}</p>}
                 <div className={styles.modalActions}>
@@ -5442,18 +6086,29 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   >
                     取消
                   </button>
-                  <button
-                    className={styles.primaryButton}
-                    disabled={
-                      !customTaskDraft.title.trim() ||
-                      !customTaskDraft.startDate ||
-                      (customTaskDraft.projectId === NEW_PROJECT_OPTION &&
-                        !customTaskDraft.newProjectName.trim())
-                    }
-                    onClick={createCustomTask}
-                  >
-                    创建到首页
-                  </button>
+                  {customTaskDraft.projectId === NEW_PROJECT_OPTION ? (
+                    <button
+                      className={styles.primaryButton}
+                      disabled={!customTaskDraft.newProjectName.trim()}
+                      onClick={createNewProjectStructure}
+                    >
+                      创建总项目
+                    </button>
+                  ) : (
+                    <button
+                      className={styles.primaryButton}
+                      disabled={
+                        !customTaskDraft.title.trim() ||
+                        (customTaskDraft.scheduleType !== "backlog" &&
+                          !customTaskDraft.startDate)
+                      }
+                      onClick={createCustomTask}
+                    >
+                      {customTaskDraft.scheduleType === "backlog"
+                        ? "创建到待安排"
+                        : "创建任务"}
+                    </button>
+                  )}
                 </div>
               </>
             )}
@@ -5842,7 +6497,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 <div className={styles.planModuleHeader}>
                   <span className={styles.planModuleNumber}>01</span>
                   <div>
-                  <p className={styles.eyebrow}>项目任务规划</p>
+                  <p className={styles.eyebrow}>项目结构</p>
                   <h3>
                     {projectEditDraft
                       ? "统一调整任务、内容与日期"
@@ -5851,15 +6506,42 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   <small>先看阶段，再展开具体任务</small>
                   </div>
                 </div>
-                {projectEditDraft && (
-                  <button
-                    className={styles.projectEditButton}
-                    onClick={() => setAddingMilestone(true)}
-                    type="button"
-                  >
-                    ＋ 新增阶段
-                  </button>
-                )}
+                <div className={styles.projectTaskPlannerHeaderActions}>
+                  {projectTaskGroups.length > 0 && (
+                    <div
+                      className={styles.collapseAllMilestonesButton}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() =>
+                        setCollapsedProjectMilestones((current) => {
+                          const next = { ...current };
+                          projectTaskGroups.forEach((group) => {
+                            next[projectMilestoneKey(group.milestone)] =
+                              !allProjectMilestonesCollapsed;
+                          });
+                          return next;
+                        })
+                      }
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          event.currentTarget.click();
+                        }
+                      }}
+                    >
+                      {allProjectMilestonesCollapsed ? "全部展开" : "全部折叠"}
+                    </div>
+                  )}
+                  {projectEditDraft && (
+                    <button
+                      className={styles.projectEditButton}
+                      onClick={() => setAddingMilestone(true)}
+                      type="button"
+                    >
+                      ＋ 新增阶段
+                    </button>
+                  )}
+                </div>
               </div>
               {projectEditDraft && addingMilestone && (
                 <div className={styles.newMilestoneForm}>
@@ -5908,7 +6590,14 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 </div>
               ) : (
                 <div className={styles.projectTaskEditorList}>
-                  {projectTaskGroups.map((group, groupIndex) => (
+                  {projectTaskGroups.map((group, groupIndex) => {
+                    const milestoneKey = projectMilestoneKey(group.milestone);
+                    const milestoneCollapsed =
+                      collapsedProjectMilestones[milestoneKey] || false;
+                    const completedTasks = group.tasks.filter(
+                      (task) => taskCompletion(task) === 100,
+                    ).length;
+                    return (
                     <section className={styles.projectMilestoneGroup} key={group.milestone}>
                       <header className={styles.projectMilestoneHeader}>
                         <span>阶段 {String(groupIndex + 1).padStart(2, "0")}</span>
@@ -5928,14 +6617,16 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           <strong>{group.milestone}</strong>
                         )}
                         <div className={styles.projectMilestoneHeaderActions}>
-                          <small>{group.tasks.length} 项子任务</small>
+                          <small>
+                            {completedTasks}/{group.tasks.length} 已完成
+                          </small>
                           {projectEditDraft && (
                             <>
                               <button
                                 type="button"
                                 onClick={() => addProjectTaskDraft(group.milestone)}
                               >
-                                ＋ 子任务
+                                ＋ 具体任务
                               </button>
                               <button
                                 className={styles.milestoneDeleteButton}
@@ -5946,8 +6637,34 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                               </button>
                             </>
                           )}
+                          <div
+                            className={`${styles.milestoneCollapseButton} ${
+                              milestoneCollapsed
+                                ? styles.milestoneCollapseButtonClosed
+                                : ""
+                            }`}
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`${milestoneCollapsed ? "展开" : "折叠"}阶段：${group.milestone}`}
+                            aria-expanded={!milestoneCollapsed}
+                            onClick={() =>
+                              setCollapsedProjectMilestones((current) => ({
+                                ...current,
+                                [milestoneKey]: !milestoneCollapsed,
+                              }))
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                event.currentTarget.click();
+                              }
+                            }}
+                          >
+                            <span aria-hidden="true">⌄</span>
+                          </div>
                         </div>
                       </header>
+                      {!milestoneCollapsed && (
                       <div className={styles.projectMilestoneTasks}>
                   {group.tasks.map((task, taskIndex) => {
                     return (
@@ -6032,7 +6749,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           />
                         </label>
                         <label>
-                          <span>任务分组 / 里程碑</span>
+                          <span>项目阶段</span>
                           <input
                             value={task.milestone || ""}
                             onChange={(event) =>
@@ -6068,6 +6785,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                               )
                             }
                           >
+                            <option value="backlog">以后再安排</option>
                             <option value="once">一次性任务</option>
                             <option value="daily">每天</option>
                             <option value="weekdays">每个工作日</option>
@@ -6075,7 +6793,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                             <option value="range">持续一段时间</option>
                           </select>
                         </label>
-                        <label>
+                        {taskScheduleType(task) !== "backlog" && <label>
                           <span>开始日期</span>
                           <input
                             type="date"
@@ -6087,8 +6805,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                               })
                             }
                           />
-                        </label>
-                        {taskScheduleType(task) !== "once" && (
+                        </label>}
+                        {taskScheduleType(task) !== "once" && taskScheduleType(task) !== "backlog" && (
                           <label>
                             <span>结束日期</span>
                             <input
@@ -6228,8 +6946,10 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     );
                   })}
                       </div>
+                      )}
                     </section>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
               <small className={styles.projectTaskPlannerHint}>
@@ -6682,19 +7402,36 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             {calendarMoveNotice && (
               <div className={styles.calendarMoveNotice} role="status">
                 <span>
-                  <strong>日期已修改</strong>
-                  “{compactTitle(calendarMoveNotice.taskTitle)}”已移到{dateTitle(calendarMoveNotice.targetDate)}。
+                  <strong>
+                    {calendarMoveNotice.targetDate ? "日期已修改" : "已移至待安排"}
+                  </strong>
+                  “{compactTitle(calendarMoveNotice.taskTitle)}”
+                  {calendarMoveNotice.targetDate
+                    ? `已移到${dateTitle(calendarMoveNotice.targetDate)}。`
+                    : "已从日历移除，任务内容和进度仍然保留。"}
                 </span>
                 <div className={styles.calendarMoveActions}>
                   <button onClick={undoCalendarMove}>撤销</button>
-                  <button
-                    onClick={() => {
-                      setSelectedCalendarDate(calendarMoveNotice.targetDate);
-                      setCalendarMoveNotice(null);
-                    }}
-                  >
-                    查看新日期 →
-                  </button>
+                  {calendarMoveNotice.targetDate ? (
+                    <button
+                      onClick={() => {
+                        setSelectedCalendarDate(calendarMoveNotice.targetDate);
+                        setCalendarMoveNotice(null);
+                      }}
+                    >
+                      查看新日期 →
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setSelectedCalendarDate(null);
+                        setCalendarMoveNotice(null);
+                        setActiveTab("projects");
+                      }}
+                    >
+                      前往待安排 →
+                    </button>
+                  )}
                 </div>
               </div>
             )}
@@ -6790,6 +7527,13 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                                 {storedTask.recurrence ? "将同步移动整个周期" : "将同步移动日期范围"}
                               </small>
                             )}
+                            <button
+                              className={styles.moveToBacklogButton}
+                              type="button"
+                              onClick={() => moveTaskToBacklog(storedTask.id)}
+                            >
+                              移至待安排
+                            </button>
                           </div>
                         </article>
                       );
@@ -6844,13 +7588,13 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     />
                   </label>
                   <label>
-                    <span>任务分块 / 里程碑</span>
+                    <span>项目阶段</span>
                     <input
-                      aria-label="编辑任务分块"
+                      aria-label="编辑项目阶段"
                       value={selectedTask.milestone || ""}
                       onChange={(event) => setExecutionDraft((task) => task ? { ...task, milestone: event.target.value } : task)}
                     />
-                    <small className={styles.fieldHelp}>相同项目中使用相同分块名称的任务会显示在同一阶段。</small>
+                    <small className={styles.fieldHelp}>相同总项目中使用相同阶段名称的具体任务会归在一起。</small>
                   </label>
                   <label className={styles.customTaskWide}>
                     <span>任务详情 / 要达成的结果</span>
@@ -6885,7 +7629,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       onChange={(event) => setExecutionDraft((task) => task ? { ...task, acceptance_criteria: event.target.value.split("\n") } : task)}
                     />
                   </label>
-                  <label>
+                  {taskScheduleType(selectedTask) !== "backlog" && <label>
                     <span>开始日期</span>
                     <input
                       aria-label="编辑任务开始日期"
@@ -6893,8 +7637,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       value={selectedTask.scheduled_date || ""}
                       onChange={(event) => setExecutionDraft((task) => task ? { ...task, scheduled_date: event.target.value || null } : task)}
                     />
-                  </label>
-                  <label>
+                  </label>}
+                  {taskScheduleType(selectedTask) !== "backlog" && <label>
                     <span>结束日期</span>
                     <input
                       aria-label="编辑任务结束日期"
@@ -6903,7 +7647,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       value={selectedTask.end_date || ""}
                       onChange={(event) => setExecutionDraft((task) => task ? { ...task, end_date: event.target.value || null } : task)}
                     />
-                  </label>
+                  </label>}
                   <label>
                     <span>重复方式</span>
                     <select
@@ -6913,11 +7657,26 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                         const value = event.target.value as ScheduleType;
                         setExecutionDraft((task) => task ? {
                           ...task,
+                          scheduled_date:
+                            value === "backlog"
+                              ? null
+                              : task.scheduled_date || localDate(),
                           recurrence: value === "daily" || value === "weekdays" || value === "weekends" ? value : null,
-                          end_date: value === "once" ? null : task.end_date || task.scheduled_date,
+                          end_date:
+                            value === "backlog" || value === "once"
+                              ? null
+                              : task.end_date || task.scheduled_date || localDate(),
+                          status:
+                            value === "backlog" && task.status !== "done"
+                              ? "backlog"
+                              : value !== "backlog" && task.status === "backlog"
+                                ? "scheduled"
+                                : task.status,
+                          paused: value === "backlog" ? false : task.paused,
                         } : task);
                       }}
                     >
+                      <option value="backlog">以后再安排</option>
                       <option value="once">一次性任务</option>
                       <option value="range">持续一段时间</option>
                       <option value="daily">每天</option>
@@ -6939,7 +7698,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </section>
             )}
             <p className={styles.eyebrow}>
-              {selectedTask.milestone || "未设置里程碑"}
+              {selectedTask.milestone || "未设置项目阶段"}
             </p>
             <div className={styles.detailTaskTitle}>
               <button

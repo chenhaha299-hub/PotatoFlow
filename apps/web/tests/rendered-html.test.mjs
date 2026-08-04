@@ -133,7 +133,7 @@ test("source keeps the app empty and local-first", async () => {
   assert.match(app, /统一设置项目任务标签/);
   assert.match(app, /updateAllProjectTaskCategories/);
   assert.match(app, /新增阶段/);
-  assert.match(app, /＋ 子任务/);
+  assert.match(app, /＋ 具体任务/);
   assert.match(app, /projectEditDraft && addingMilestone/);
   assert.match(app, /projectTaskSwipeStartRef/);
   assert.match(app, /projectTaskEditorShellSwiped/);

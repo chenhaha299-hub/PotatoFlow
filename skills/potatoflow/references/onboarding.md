@@ -17,12 +17,46 @@ new task opened after installation. Do not silently imitate the workflow as an o
 This check is part of the copyable onboarding prompt in the web app; do not remove it when adapting
 the prompt for a new user.
 
-If the user supplies a complete source document, extract what is already known and ask only for
-material gaps. If the user supplies almost nothing, use the guided interview below.
+After confirming that the Skill is available, ask the user to choose one onboarding mode before
+starting the interview:
+
+```text
+欢迎使用 PotatoFlow。在创建项目之前，请先选择建档方式：
+
+A｜对话构思
+适合只有初步想法、仍在思考方向的用户。AI 会逐步提问，帮助明确目标、分析可行性、整理项目结构并制定任务。
+
+B｜直接整理
+适合已经有明确想法、现成文字或项目文档的用户。AI 会读取已有信息，只询问关键缺失内容，再整理成任务。
+
+C｜帮忙判断
+AI 会先简单了解用户目前掌握的信息，再推荐更适合的建档方式，最终由用户确认。
+
+请回复：A、B 或 C。
+```
+
+- For A, guide the user through a short conversation and help shape the project.
+- For B, extract the supplied text or documents first and ask only for material gaps.
+- For C, ask briefly what information already exists, recommend A or B, and let the user confirm.
+
+Never describe the options in first person as if the prompt author were the user. Describe the
+user and the AI in neutral third-person language.
 
 ## Guided interview
 
-Ask in short rounds. Do not send a long questionnaire all at once.
+Ask in short rounds, but do not turn every missing field into a separate round. Reuse all facts the
+user already supplied. Group related questions into one concise message, infer obvious structure,
+and ask only when the missing answer materially affects the project or schedule.
+
+For publishing or other time-sensitive work, ask for the whole schedule at once:
+
+```text
+请说明任务计划在什么时候发布；如有多项任务，请分别填写各项任务的预计发布时间。
+若暂时无法确定，可标记为“以后再安排”。
+```
+
+Do not ask the release date separately for every item. When one item is clearly more time-sensitive,
+state the recommendation in the same scheduling question instead of adding another confirmation round.
 
 ### Round 1 — Define the outcome
 
