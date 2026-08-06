@@ -1357,7 +1357,7 @@ export default function LogicGraphPrototype({
             </div>
           </main>
 
-          <aside className={styles.memoStudioInspector}>
+          <aside className={`${styles.memoStudioInspector}${selectedNode ? "" : " " + styles.memoStudioInspectorIdle}`}>
             {selectedNode ? (
               <>
                 <header>
