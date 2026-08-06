@@ -5348,6 +5348,7 @@
 @media (max-width: 1050px) {
   .memoStudioGrid { grid-template-columns: 190px minmax(340px, 1fr); }
   .memoStudioInspector { position: fixed; z-index: 80; top: 24px; right: 24px; bottom: 24px; width: min(390px, calc(100vw - 48px)); border: 1px solid #dce5da; border-radius: 22px; box-shadow: 0 24px 80px rgba(20, 39, 28, .25); }
+  .memoStudioInspector { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   .memoStudioInspectorEmpty { display: none; }
   .memoStudioInspectorIdle { display: none; }
 }

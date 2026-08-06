@@ -266,6 +266,15 @@ export default function LogicGraphPrototype({
 
   const activePage = pages.find((page) => page.id === activePageId) || null;
   const selectedNode = activePage?.nodes.find((node) => node.id === selectedNodeId) || null;
+
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [selectedNodeId]);
   const selectedEdge = activePage?.edges.find((edge) => edge.id === selectedEdgeId) || null;
   const selectedChildPage = selectedNode?.childPageId
     ? pages.find((page) => page.id === selectedNode.childPageId) || null
