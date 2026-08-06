@@ -331,7 +331,7 @@ type NewProjectStructureStageDraft = {
   tasks: NewProjectStructureTaskDraft[];
 };
 
-type TabId = "today" | "calendar" | "projects" | "issues" | "logic-graph";
+type TabId = "today" | "calendar" | "projects" | "issues" | "logic-graph" | "memo";
 
 const STORAGE_KEY = "potatoflow:v1";
 const STORAGE_BACKUP_KEY = "potatoflow:v1:backup";
@@ -841,7 +841,8 @@ const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel?: string; mark: s
   { id: "calendar", label: "日历", mark: "日" },
   { id: "projects", label: "项目", mark: "项" },
   { id: "issues", label: "问题", mark: "问" },
-  { id: "logic-graph", label: "逻辑网图", mobileLabel: "网图", mark: "网" },
+  { id: "logic-graph", label: "思维网图", mobileLabel: "网图", mark: "网" },
+  { id: "memo", label: "备忘录", mark: "备" },
 ];
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -1314,6 +1315,7 @@ export default function PotatoFlowApp({
   const [store, setStore] = useState<Store>(EMPTY_STORE);
   const [hydrated, setHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>("today");
+  const [requestedLogicGraphPageId, setRequestedLogicGraphPageId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(localDate());
   const dateInputRef = useRef<HTMLInputElement>(null);
   const taskDrawerRef = useRef<HTMLElement>(null);
@@ -4519,6 +4521,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               className={activeTab === item.id ? styles.navActive : ""}
               key={item.id}
               onClick={() => {
+                if (item.id === "logic-graph") setRequestedLogicGraphPageId(null);
                 setActiveTab(item.id);
                 if (item.id === "today") setSelectedDate(localDate());
               }}
@@ -4555,7 +4558,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 : NAV_ITEMS.find((item) => item.id === activeTab)?.label}
             </h1>
           </div>
-          {activeTab === "logic-graph" ? (
+          {activeTab === "logic-graph" || activeTab === "memo" ? (
             <span className={styles.prototypeStatus}>
               {syncEnabled ? "自动保存 · 跨设备同步" : "自动保存 · 当前设备"}
             </span>
@@ -5111,6 +5114,28 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
 
         {activeTab === "logic-graph" && (
           <LogicGraphPrototype
+            mode="graph"
+            openPageId={requestedLogicGraphPageId}
+            pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
+            syncEnabled={syncEnabled}
+            onPagesChange={(updater) =>
+              updateStore((current) => ({
+                ...current,
+                logic_graph_pages: updater(
+                  current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
+                ),
+              }))
+            }
+          />
+        )}
+
+        {activeTab === "memo" && (
+          <LogicGraphPrototype
+            mode="memo"
+            onOpenGraphPage={(pageId) => {
+              setRequestedLogicGraphPageId(pageId);
+              setActiveTab("logic-graph");
+            }}
             pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
             syncEnabled={syncEnabled}
             onPagesChange={(updater) =>
@@ -5172,6 +5197,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             key={item.id}
             className={activeTab === item.id ? styles.mobileActive : ""}
             onClick={() => {
+              if (item.id === "logic-graph") setRequestedLogicGraphPageId(null);
               setActiveTab(item.id);
               if (item.id === "today") setSelectedDate(localDate());
             }}

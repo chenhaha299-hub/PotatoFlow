@@ -5168,6 +5168,202 @@
   margin: 0 auto;
 }
 
+.memoStudio {
+  width: min(1360px, 100%);
+  margin: 0 auto;
+}
+
+/* ── 备忘录层级配色：一级绿 / 二级橙 / 三级紫 ── */
+.memoStudioLevel2 .memoStudioHeader { border-bottom: 1px solid #f0d9b8; }
+.memoStudioLevel2 .memoStudioHeader h2,
+.memoStudioLevel2 .memoStudioEditor > header small { color: #b26a1a; }
+.memoStudioLevel2 .memoStudioGrid { border-color: #ecd3ae; box-shadow: 0 22px 64px rgba(178, 106, 26, 0.12); }
+.memoStudioLevel2 .memoStudioDirectory { background: #fdf6ec; border-right-color: #f0d9b8; }
+.memoStudioLevel2 .memoStudioDirectory > strong { color: #b26a1a; }
+.memoStudioLevel2 .memoStudioPages .memoStudioPageActive { border-color: #f0d9b8; background: linear-gradient(120deg, #fdf0dc, #fdfaf3); }
+.memoStudioLevel2 .memoStudioThoughts > .memoStudioThoughtActive { background: #fdf6ec; border-color: #e8c99a; box-shadow: inset 3px 0 #b26a1a; }
+.memoStudioLevel2 .memoStudioThoughts > .memoStudioThoughtActive strong { color: #b26a1a; }
+.memoStudioLevel2 .memoStudioEditor > header { border-bottom-color: #f2e2c8; }
+
+.memoStudioLevel3 .memoStudioHeader { border-bottom: 1px solid #cdb2e6; }
+.memoStudioLevel3 .memoStudioHeader h2,
+.memoStudioLevel3 .memoStudioEditor > header small { color: #6b3fa0; }
+.memoStudioLevel3 .memoStudioGrid { border-color: #c4a8e0; box-shadow: 0 22px 64px rgba(107, 63, 160, 0.14); }
+.memoStudioLevel3 .memoStudioDirectory { background: #f0e8fa; border-right-color: #cdb2e6; }
+.memoStudioLevel3 .memoStudioDirectory > strong { color: #6b3fa0; }
+.memoStudioLevel3 .memoStudioPages .memoStudioPageActive { border-color: #cdb2e6; background: linear-gradient(120deg, #e4d4f5, #faf7fd); }
+.memoStudioLevel3 .memoStudioThoughts > .memoStudioThoughtActive { background: #f3ecfb; border-color: #c4a8e0; box-shadow: inset 3px 0 #6b3fa0; }
+.memoStudioLevel3 .memoStudioThoughts > .memoStudioThoughtActive strong { color: #6b3fa0; }
+.memoStudioLevel3 .memoStudioEditor > header { border-bottom-color: #e2d6f0; }
+
+
+.memoStudioHeaderTitle { display: flex; align-items: center; gap: 12px; }
+.memoStudioHeaderTitle h2 { margin: 0; }
+.memoStudioHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 28px 4px 20px;
+}
+
+.memoStudioHeader h2 {
+  margin: 5px 0 7px;
+  font-size: clamp(32px, 4vw, 48px);
+  letter-spacing: -0.06em;
+}
+
+.memoStudioHeader p:last-child { margin: 0; color: var(--muted); }
+
+.memoStudioGrid {
+  display: grid;
+  min-height: 690px;
+  grid-template-columns: 230px minmax(380px, 1fr) 330px;
+  overflow: hidden;
+  border: 1px solid #d9e3d8;
+  border-radius: 26px;
+  background: white;
+  box-shadow: 0 22px 64px rgba(32, 58, 40, 0.1);
+}
+
+.memoStudioDirectory {
+  border-right: 1px solid #e1e7df;
+  background: #f6f8f3;
+  padding: 20px 14px;
+}
+
+.memoStudioDirectory > strong { display: block; margin: 0 5px 13px; font-size: 17px; }
+.memoStudioSearch { border: 1px solid #dce4d9; border-radius: 13px; background: white; color: var(--muted); padding: 12px; font-size: 13px; }
+.memoStudioPages { display: grid; gap: 7px; margin-top: 13px; }
+.memoStudioPages > button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  background: transparent;
+  padding: 12px 10px;
+  text-align: left;
+}
+.memoStudioPages > .memoStudioPageRow > .memoStudioPageMain > span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 11px; background: #e5eee6; color: var(--green); font-size: 12px; font-weight: 900; }
+.memoStudioPages > .memoStudioPageRow > .memoStudioPageMain div { display: grid; min-width: 0; gap: 3px; }
+.memoStudioPages > .memoStudioPageRow > .memoStudioPageMain b,
+.memoStudioPages > .memoStudioPageRow > .memoStudioPageMain small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memoStudioPages > .memoStudioPageRow > .memoStudioPageMain small { color: var(--muted); font-size: 11px; }
+.memoStudioPages .memoStudioPageRow { display: flex; align-items: center; gap: 4px; border: 1px solid transparent; border-radius: 14px; }
+.memoStudioPages .memoStudioPageRow:hover { border-color: #dfe8de; background: #f1f5ef; }
+.memoStudioPages .memoStudioPageActive { border-color: #cfe0d0; background: linear-gradient(120deg, #e9f3e9, #f8faef); }
+.memoStudioPages .memoStudioPageMain { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; flex: 1; min-width: 0; border: 0; background: transparent; padding: 10px 8px; text-align: left; }
+.memoStudioPageDelete { flex: none; display: grid; width: 26px; height: 26px; margin-right: 6px; place-items: center; border: 1px solid #efc9bd; border-radius: 8px; background: #fff8f5; color: #a6533c; font-size: 15px; line-height: 1; cursor: pointer; }
+.memoStudioPageRow:hover .memoStudioPageDelete,
+.memoStudioPageDelete:hover { opacity: 1; background: #fdece7; border-color: #e8a996; }
+.memoStudioPageDelete:hover { background: #fdeae2; }
+
+.memoStudioEditor { min-width: 0; background: #fff; padding: 22px; }
+.memoStudioEditor > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid #e6ebe4; padding-bottom: 18px; }
+.memoStudioEditorActions { display: flex; align-items: center; gap: 10px; }
+.memoStudioEditor > header small { color: var(--green); font-weight: 850; }
+.memoStudioEditor > header h3 { margin: 4px 0 0; font-size: 28px; }
+.memoStudioThoughts { display: grid; gap: 8px; padding: 20px 0; }
+.memoInlineIdea { border: 1px solid #bfd6c3; border-radius: 14px; background: #f5faf5; padding: 12px; }
+.memoInlineIdea textarea { width: 100%; min-height: 72px; resize: vertical; border: 1px solid #d9e4d8; border-radius: 10px; background: white; padding: 10px; font: inherit; }
+.memoInlineIdea textarea:focus { outline: 2px solid rgba(31, 106, 73, .25); border-color: var(--green); }
+.memoInlineIdeaActions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+.memoInlineIdeaActions > span { margin-right: auto; color: var(--muted); font-size: 12px; }
+.memoStudioThoughts > button { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 1px solid #e3e9e1; border-radius: 14px; background: white; padding: 13px 15px; text-align: left; }
+.memoStudioThoughts > button:hover,
+.memoStudioThoughts > .memoStudioThoughtActive { background: #f5faf5; border-color: #bfd6c3; box-shadow: inset 3px 0 var(--green); }
+.memoStudioThoughts button span { display: grid; min-width: 0; gap: 3px; }
+.memoStudioThoughts button span strong,
+.memoStudioThoughts button span small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memoStudioThoughts button em { color: var(--muted); font-size: 11px; font-style: normal; }
+.memoStudioChecklist { overflow: hidden; border: 1px solid #dfe6dd; border-radius: 18px; }
+.memoStudioChecklist > header { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 11px; background: #f5f8f3; padding: 13px 15px; }
+.memoStudioChecklist > header > span { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 12px; background: var(--green); color: white; font-weight: 900; }
+.memoStudioChecklist h4 { margin: 2px 0 0; font-size: 17px; }
+.memoStudioChecklist small { color: var(--muted); }
+.memoStudioChecklist > header > b { color: var(--green); font-size: 12px; }
+.memoStudioChecklist > div { display: grid; }
+.memoStudioChecklist > div > button:not(.memoStudioAddThought) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; border: 0; border-top: 1px solid #edf1eb; background: white; padding: 14px 15px; text-align: left; }
+.memoStudioChecklist > div > button:not(.memoStudioAddThought):hover,
+.memoStudioChecklist > div > .memoStudioThoughtActive { background: #f5faf5; box-shadow: inset 4px 0 var(--green); }
+.memoStudioChecklist button span { display: grid; min-width: 0; gap: 3px; }
+.memoStudioChecklist button span strong,
+.memoStudioChecklist button span small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.memoStudioChecklist button em { color: var(--muted); font-size: 11px; font-style: normal; }
+.memoStudioEmpty { margin: 0; color: var(--muted); padding: 20px; text-align: center; }
+.memoStudioAddThought,
+.memoStudioAddChecklist { border: 1px dashed #cfdccf; background: #fafcf8; color: var(--green); padding: 13px; font-weight: 900; }
+.memoStudioAddChecklist { width: 100%; border-radius: 15px; }
+
+.memoStudioInspector { min-width: 0; overflow: hidden; border-left: 1px solid #e1e7df; background: #fbfcfa; padding: 20px; }
+.memoStudioInspector > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.memoStudioInspector > header small { color: var(--green); font-weight: 850; }
+.memoStudioInspector > header h3 { margin: 4px 0 0; font-size: 24px; }
+.memoStudioInspector > header > button { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: white; font-size: 22px; }
+.memoStudioStatus,
+.memoStudioAttachments { display: grid; gap: 10px; margin-top: 17px; border: 1px solid #dfe6dd; border-radius: 16px; background: white; padding: 13px; }
+.memoStudioStatus > div { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.memoStudioStatus button { display: grid; place-items: center; gap: 5px; border: 1px solid #e0e6dd; border-radius: 10px; background: white; padding: 8px 4px; font-size: 11px; }
+.memoStudioStatus .memoStudioStatusActive { border-color: var(--green); background: #edf7ef; box-shadow: 0 0 0 2px rgba(31, 106, 73, 0.08); }
+.memoStudioField { display: grid; gap: 7px; margin-top: 15px; }
+.memoStudioField > span { font-size: 13px; font-weight: 850; }
+.memoStudioField input,
+.memoStudioField textarea { width: 100%; border: 1px solid #dbe3d8; border-radius: 13px; background: white; padding: 11px 12px; font: inherit; }
+.memoStudioField textarea { min-height: 132px; resize: vertical; }
+.memoStudioAttachments > div:first-child { display: flex; align-items: center; justify-content: space-between; }
+.memoStudioAttachments small { color: var(--muted); }
+.memoStudioAttachments > label { display: grid; min-height: 42px; place-items: center; border: 1px dashed #c8d8ca; border-radius: 12px; color: var(--green); font-weight: 850; }
+.memoStudioAttachments > label input { display: none; }
+.memoStudioImageGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.memoStudioImageGrid button { overflow: hidden; aspect-ratio: 1; border: 0; border-radius: 10px; background: #edf2eb; padding: 0; }
+.memoStudioImageGrid img { width: 100%; height: 100%; object-fit: cover; }
+.memoStudioFile { overflow: hidden; border: 0; border-radius: 10px; background: #f1f5ef; color: var(--ink); padding: 9px 10px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.memoStudioFileRow { display: flex; align-items: center; gap: 6px; margin-top: 7px; }
+.memoStudioFileRow .memoStudioFile { flex: 1; min-width: 0; }
+.memoStudioFileRemove, .memoStudioImageRemove { flex: none; display: grid; width: 26px; height: 26px; place-items: center; border: 1px solid #efc9bd; border-radius: 8px; background: #fff8f5; color: #a6533c; font-size: 15px; line-height: 1; cursor: pointer; }
+.memoStudioImageCell { position: relative; }
+.memoStudioImageCell > button { overflow: hidden; aspect-ratio: 1; width: 100%; border: 0; border-radius: 10px; background: #edf2eb; padding: 0; }
+.memoStudioImageCell img { width: 100%; height: 100%; object-fit: cover; }
+.memoStudioImageRemove { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 7px; opacity: .92; }
+.memoStudioGenerateAll { border: 1px solid #bfd6c3; border-radius: 10px; background: #f2f8f2; color: #1f6a49; padding: 9px 14px; font-weight: 850; }
+.memoStudioGenerateAll:hover { background: #e6f1e6; }
+.memoStudioGenerate { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; margin-top: 17px; border: 0; border-radius: 16px; background: var(--green); color: white; padding: 15px; text-align: left; }
+.memoStudioGenerate span { display: grid; gap: 3px; }
+.memoStudioGenerate small { color: rgba(255,255,255,.72); }
+.memoStudioGenerate strong { font-size: 16px; }
+.memoStudioGenerate b { font-size: 24px; }
+.memoStudioChild { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; margin-top: 9px; border: 1px solid #d8e2d6; border-radius: 14px; background: white; padding: 12px 15px; text-align: left; }
+.memoStudioChild span { display: grid; gap: 3px; }
+.memoStudioChild small { color: var(--muted); font-size: 11px; }
+.memoStudioChild strong { color: #2e4a38; font-size: 14px; }
+.memoStudioChild b { color: var(--green); font-size: 16px; }
+.memoStudioDeleteThought { width: 100%; margin-top: 9px; border: 1px solid #efc9bd; border-radius: 13px; background: #fff8f5; color: #a6533c; padding: 11px; font-weight: 850; }
+.memoStudioInspectorEmpty { display: grid; min-height: 0; height: 100%; place-content: center; justify-items: center; overflow: hidden; color: var(--muted); text-align: center; }
+.memoStudioInspectorEmpty span { color: var(--green); font-size: 48px; }
+.memoStudioInspectorEmpty h3 { margin: 8px 0; color: var(--ink); }
+.memoStudioInspectorEmpty p { max-width: 240px; margin: 0; line-height: 1.6; }
+
+@media (max-width: 1050px) {
+  .memoStudioGrid { grid-template-columns: 190px minmax(340px, 1fr); }
+  .memoStudioInspector { position: fixed; z-index: 80; top: 24px; right: 24px; bottom: 24px; width: min(390px, calc(100vw - 48px)); border: 1px solid #dce5da; border-radius: 22px; box-shadow: 0 24px 80px rgba(20, 39, 28, .25); }
+  .memoStudioInspectorEmpty { display: none; }
+}
+
+@media (max-width: 720px) {
+  .memoStudioHeader { align-items: stretch; flex-direction: column; padding-top: 14px; }
+  .memoStudioGrid { display: block; min-height: 620px; }
+  .memoStudioDirectory { overflow-x: auto; border-right: 0; border-bottom: 1px solid #e1e7df; }
+  .memoStudioDirectory > strong,
+  .memoStudioSearch { display: none; }
+  .memoStudioPages { display: flex; margin: 0; }
+  .memoStudioPages > button { min-width: 160px; }
+  .memoStudioEditor { padding: 16px 12px; }
+  .memoStudioInspector { top: 12px; right: 12px; bottom: 12px; width: calc(100vw - 24px); }
+  .memoStudioChecklist button em { display: none; }
+}
+
 .prototypeNotice {
   display: flex;
   align-items: flex-start;
@@ -5574,6 +5770,233 @@
   color: var(--ink);
   padding: 0 13px;
   font-weight: 800;
+}
+
+.logicViewSwitch {
+  display: inline-flex;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #f4f7f2;
+  padding: 3px;
+}
+
+.logicViewSwitch button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #687269;
+  padding: 0 12px;
+  font-weight: 800;
+}
+
+.logicViewSwitch .logicViewSwitchActive {
+  background: white;
+  color: var(--logic-level-accent);
+  box-shadow: 0 3px 10px rgba(30, 54, 39, 0.1);
+}
+
+.logicChecklistWorkspace {
+  min-height: 560px;
+  background: #f5f8f3;
+  padding: 24px;
+}
+
+.logicChecklistWorkspaceHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.logicChecklistWorkspaceHeader span {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+
+.logicChecklistWorkspaceHeader h3 {
+  margin: 5px 0 4px;
+  font-size: 28px;
+}
+
+.logicChecklistWorkspaceHeader p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.logicChecklistGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.logicChecklistCard {
+  overflow: hidden;
+  border: 1px solid #d9e4d8;
+  border-radius: 20px;
+  background: white;
+  box-shadow: 0 12px 28px rgba(31, 68, 48, 0.07);
+}
+
+.logicChecklistCard > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #e4ebe3;
+  background: #edf5ee;
+  padding: 15px;
+}
+
+.logicChecklistCard > header > span {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--green);
+  color: white;
+  font-weight: 900;
+}
+
+.logicChecklistCard h4,
+.logicChecklistCard small {
+  margin: 0;
+}
+
+.logicChecklistCard h4 { font-size: 18px; }
+.logicChecklistCard small { color: var(--muted); }
+.logicChecklistCard > header > b { color: var(--green); font-size: 13px; }
+
+.logicChecklistItems { display: grid; }
+
+.logicChecklistItems > button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 11px;
+  border: 0;
+  border-bottom: 1px solid #edf0eb;
+  background: white;
+  padding: 14px 15px;
+  text-align: left;
+}
+
+.logicChecklistItems > button:hover { background: #fafcf8; }
+.logicChecklistItems > button > span { display: grid; min-width: 0; gap: 3px; }
+.logicChecklistItems > button strong,
+.logicChecklistItems > button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logicChecklistItems > button em { color: var(--muted); font-size: 12px; font-style: normal; }
+.logicChecklistItems > button > b { color: var(--green); font-size: 13px; }
+
+.logicChecklistEmpty {
+  color: var(--muted);
+  padding: 24px 15px;
+  text-align: center;
+}
+
+.logicChecklistAdd {
+  width: 100%;
+  border: 0;
+  background: #fbfcf9;
+  color: var(--green);
+  padding: 13px;
+  font-weight: 900;
+}
+
+.memoStudioActions .logicInlineComposer {
+  display: flex;
+  flex-basis: 100%;
+  gap: 8px;
+  margin-top: 0;
+  border: 1px solid #d9e4d8;
+  border-radius: 16px;
+  background: white;
+  padding: 10px;
+}
+
+.logicInlineComposer input {
+  min-width: 0;
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  padding: 0 12px;
+}
+
+.logicThoughtMeta {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dde5db;
+  border-radius: 16px;
+  background: #f8faf6;
+  padding: 13px;
+}
+
+.logicThoughtMeta > div:first-child { display: grid; gap: 2px; }
+.logicThoughtMeta small { color: var(--muted); }
+
+.logicStatusPicker {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.logicStatusPicker button {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  font-weight: 800;
+}
+
+.logicStatusPicker .logicStatusSelected {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(31, 106, 73, 0.1);
+}
+
+.logicStatusRed,
+.logicStatusOrange,
+.logicStatusGreen,
+.logicStatusBlack {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #171b18;
+}
+
+.logicStatusRed { background: #d4564c; }
+.logicStatusOrange { background: #df9a27; }
+.logicStatusGreen { background: #3c9465; }
+.logicStatusBlack { background: #171b18; }
+
+.logicNodeStatusRed .logicNodeDot { fill: #d4564c; }
+.logicNodeStatusOrange .logicNodeDot { fill: #df9a27; }
+.logicNodeStatusGreen .logicNodeDot { fill: #3c9465; }
+.logicNodeStatusBlack .logicNodeDot { fill: #171b18; }
+
+@media (max-width: 760px) {
+  .logicGraphActions { grid-template-columns: 1fr auto; }
+  .logicViewSwitch { grid-column: 1 / -1; width: 100%; }
+  .logicViewSwitch button { flex: 1; }
+  .logicChecklistWorkspace { min-height: 520px; padding: 16px 12px; }
+  .logicChecklistWorkspaceHeader { align-items: stretch; flex-direction: column; }
+  .logicChecklistWorkspaceHeader h3 { font-size: 23px; }
+  .logicChecklistGrid { grid-template-columns: 1fr; }
+  .logicChecklistItems > button { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .logicChecklistItems > button em { display: none; }
+  .logicInlineComposer { display: grid; grid-template-columns: 1fr 1fr; }
+  .logicInlineComposer input { grid-column: 1 / -1; min-height: 44px; }
+  .logicStatusPicker { grid-template-columns: repeat(2, 1fr); }
 }
 
 .logicGraphIdentity {
@@ -6721,7 +7144,7 @@
     inset: auto 12px 12px;
     z-index: 50;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     border: 1px solid rgba(228, 231, 223, 0.9);
     border-radius: 20px;
     background: rgba(255, 255, 255, 0.92);
@@ -7539,3 +7962,215 @@
   .newProjectStructureTaskFields label:nth-child(-n + 2) {
     grid-column: 1;
   }
+.ideaArchitecturePreview {
+  min-height: calc(100vh - 7rem);
+  padding: 1.25rem;
+  color: #1d211d;
+}
+
+.ideaArchitectureHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.ideaArchitectureHeader h2 {
+  margin: .25rem 0 .35rem;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 1;
+}
+
+.ideaArchitectureHeader p { margin: 0; color: #6c736c; }
+
+.ideaArchitectureHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+}
+
+.ideaArchitectureHeaderActions > span {
+  padding: .65rem .85rem;
+  border-radius: 999px;
+  background: #eef4ee;
+  color: #1f6a49;
+  font-size: .82rem;
+  font-weight: 800;
+}
+
+.ideaArchitectureLayout {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+.ideaMemoDirectory,
+.ideaMemoWorkspace,
+.ideaArchitectureLegend {
+  border: 1px solid #dce5dc;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 18px 50px rgba(35, 48, 38, .07);
+}
+
+.ideaMemoDirectory { padding: 1rem; }
+
+.ideaMemoDirectoryTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .4rem .25rem .8rem;
+  border-bottom: 1px solid #e7ebe4;
+}
+
+.ideaMemoDirectoryTitle span { font-weight: 900; }
+.ideaMemoDirectoryTitle strong { color: #6c736c; font-size: .8rem; }
+
+.ideaMemoDirectory > button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: .75rem;
+  align-items: center;
+  margin-top: .75rem;
+  padding: .85rem;
+  border: 1px solid #e2e8e0;
+  border-radius: 16px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+}
+
+.ideaMemoDirectory > button > span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: #edf5ef;
+  color: #1f6a49;
+  font-weight: 900;
+}
+
+.ideaMemoDirectory > button strong,
+.ideaMemoDirectory > button small { display: block; }
+.ideaMemoDirectory > button small { margin-top: .25rem; color: #7b827b; }
+.ideaMemoDirectory > button.ideaMemoActive { border-color: #1f6a49; background: #f2f8f4; box-shadow: inset 4px 0 #1f6a49; }
+.ideaMemoDirectory > p { margin: 1rem .25rem 0; color: #7b827b; font-size: .82rem; line-height: 1.6; }
+
+.ideaMemoWorkspace { padding: 1rem; min-width: 0; }
+
+.ideaMemoHero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.15rem;
+  border-radius: 18px;
+  background: linear-gradient(120deg, #edf5ef, #fbfce9);
+}
+
+.ideaMemoHero span { color: #1f6a49; font-size: .78rem; font-weight: 900; }
+.ideaMemoHero h3 { margin: .25rem 0; font-size: 1.6rem; }
+.ideaMemoHero p { margin: 0; color: #667066; }
+.ideaMemoHero button { flex: 0 0 auto; padding: .75rem 1rem; border: 0; border-radius: 12px; background: #1f6a49; color: #fff; font-weight: 900; }
+
+.ideaMemoStats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: .65rem;
+  margin: .8rem 0;
+}
+
+.ideaMemoStats article { padding: .8rem; border: 1px solid #e3e8e1; border-radius: 14px; background: #fafbf8; }
+.ideaMemoStats strong { display: block; font-size: 1.35rem; }
+.ideaMemoStats span { color: #727a72; font-size: .78rem; }
+
+.ideaMemoViewTabs { display: inline-flex; gap: .3rem; padding: .3rem; border-radius: 12px; background: #edf0ea; }
+.ideaMemoViewTabs button { padding: .55rem .9rem; border: 0; border-radius: 9px; background: transparent; color: #657065; font-weight: 800; }
+.ideaMemoViewTabs button.ideaMemoViewActive { background: #fff; color: #1f6a49; box-shadow: 0 3px 12px rgba(35, 48, 38, .08); }
+
+.ideaListPreview { display: grid; gap: .8rem; margin-top: .8rem; }
+.ideaListPreview > section { overflow: hidden; border: 1px solid #dfe7dd; border-radius: 18px; background: #fff; }
+.ideaListPreview > section > header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .7rem; padding: .8rem 1rem; background: #f4f8f3; border-bottom: 1px solid #e2e9e0; }
+.ideaListPreview > section > header span { color: #1f6a49; font-size: .72rem; font-weight: 900; text-transform: uppercase; }
+.ideaListPreview > section > header h4 { margin: 0; }
+.ideaListPreview > section > header small { color: #747c74; }
+.ideaListPreview > section > div { display: grid; }
+.ideaListPreview > section > div > button { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto auto; align-items: center; gap: .7rem; padding: .8rem 1rem; border: 0; border-bottom: 1px solid #eef0ec; background: #fff; color: inherit; text-align: left; }
+.ideaListPreview > section > div > button:last-child { border-bottom: 0; }
+.ideaListPreview > section > div > button:hover { background: #fbfcf9; }
+.ideaListPreview button span strong,
+.ideaListPreview button span small { display: block; }
+.ideaListPreview button span small { margin-top: .15rem; color: #777f77; font-size: .72rem; }
+.ideaListPreview button em { color: #747c74; font-size: .76rem; font-style: normal; }
+.ideaListPreview button b { color: #1f6a49; font-size: .78rem; }
+
+.ideaPointRed,
+.ideaPointOrange,
+.ideaPointGreen,
+.ideaPointBlack { display: inline-block; width: 13px; height: 13px; border-radius: 50%; box-shadow: 0 0 0 5px rgba(0,0,0,.05); }
+.ideaPointRed { background: #d95d55; }
+.ideaPointOrange { background: #e7a23a; }
+.ideaPointGreen { background: #3b9a68; }
+.ideaPointBlack { background: #202520; }
+
+.ideaGraphPreview {
+  position: relative;
+  min-height: 410px;
+  margin-top: .8rem;
+  overflow: hidden;
+  border: 1px solid #dfe7dd;
+  border-radius: 18px;
+  background: #f7faf6;
+}
+.ideaGraphPreviewNote { position: absolute; top: 1rem; left: 1rem; z-index: 2; padding: .5rem .7rem; border-radius: 999px; background: #fff; color: #1f6a49; font-size: .72rem; font-weight: 900; }
+.ideaGraphPreview > span { position: absolute; height: 2px; background: #aebbad; transform-origin: left center; }
+.ideaGraphLineOne { width: 28%; left: 24%; top: 51%; transform: rotate(-18deg); }
+.ideaGraphLineTwo { width: 25%; left: 47%; top: 43%; transform: rotate(28deg); }
+.ideaGraphLineThree { width: 22%; left: 45%; top: 45%; transform: rotate(112deg); }
+.ideaGraphPoint { position: absolute; display: grid; justify-items: center; gap: .45rem; min-width: 100px; border: 0; background: transparent; color: #263026; font-weight: 800; }
+.ideaGraphPoint i { width: 24px; height: 24px; box-shadow: 0 0 0 9px rgba(31,106,73,.08); }
+.ideaGraphPoint1 { left: 16%; top: 43%; }
+.ideaGraphPoint2 { left: 43%; top: 30%; }
+.ideaGraphPoint3 { left: 68%; top: 51%; }
+.ideaGraphPoint4 { left: 39%; top: 69%; }
+.ideaGraphPoint5 { left: 68%; top: 23%; }
+
+.ideaArchitectureLegend { display: flex; align-items: center; flex-wrap: wrap; gap: .9rem; margin-top: 1rem; padding: .8rem 1rem; }
+.ideaArchitectureLegend > span { display: inline-flex; align-items: center; gap: .45rem; color: #596359; font-size: .8rem; }
+.ideaArchitectureLegend > span i { width: 10px; height: 10px; box-shadow: none; }
+.ideaArchitectureLegend small { margin-left: auto; color: #7b827b; }
+
+.ideaPointOverlay { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; padding: 1rem; background: rgba(21,29,23,.55); backdrop-filter: blur(8px); }
+.ideaPointPanel { width: min(460px, 100%); padding: 1.1rem; border-radius: 22px; background: #fff; box-shadow: 0 28px 90px rgba(16,22,17,.24); }
+.ideaPointPanel > header { display: flex; align-items: center; justify-content: space-between; }
+.ideaPointPanel > header > div { display: flex; align-items: center; gap: .6rem; color: #1f6a49; font-weight: 900; }
+.ideaPointPanel > header button { width: 38px; height: 38px; border: 1px solid #e1e6df; border-radius: 50%; background: #fff; font-size: 1.2rem; }
+.ideaPointPanel h3 { margin: .8rem 0 .3rem; font-size: 1.7rem; }
+.ideaPointPanel > p { margin: 0 0 1rem; color: #626b62; line-height: 1.65; }
+.ideaPointPanel > section { display: grid; grid-template-columns: 1fr auto; gap: .2rem 1rem; margin-top: .55rem; padding: .75rem; border: 1px solid #e4e8e1; border-radius: 13px; background: #fafbf8; }
+.ideaPointPanel > section span { color: #6c746c; font-size: .78rem; }
+.ideaPointPanel > section small { grid-column: 1 / -1; color: #878d87; }
+.ideaPointChildButton { width: 100%; display: flex; justify-content: space-between; margin-top: .9rem; padding: .85rem 1rem; border: 0; border-radius: 13px; background: #1f6a49; color: #fff; font-weight: 900; }
+
+@media (max-width: 760px) {
+  .ideaArchitecturePreview { padding: .75rem; }
+  .ideaArchitectureHeader { align-items: flex-start; }
+  .ideaArchitectureHeaderActions > span { display: none; }
+  .ideaArchitectureLayout { grid-template-columns: 1fr; }
+  .ideaMemoDirectory { display: flex; gap: .65rem; overflow-x: auto; }
+  .ideaMemoDirectoryTitle,
+  .ideaMemoDirectory > p { display: none; }
+  .ideaMemoDirectory > button { min-width: 230px; margin: 0; }
+  .ideaMemoHero { align-items: flex-start; }
+  .ideaMemoHero button { padding: .65rem; font-size: .78rem; }
+  .ideaMemoStats { grid-template-columns: repeat(2, 1fr); }
+  .ideaListPreview > section > div > button { grid-template-columns: 18px minmax(0, 1fr) auto; }
+  .ideaListPreview button em { display: none; }
+  .ideaGraphPreview { min-height: 460px; }
+  .ideaGraphPoint1 { left: 4%; }
+  .ideaGraphPoint3, .ideaGraphPoint5 { left: 64%; }
+  .ideaArchitectureLegend small { width: 100%; margin-left: 0; }
+}

@@ -10,6 +10,13 @@ import {
 } from "react";
 import styles from "./potatoflow.module.css";
 
+export type IdeaStatus = "red" | "orange" | "green" | "black";
+
+export type IdeaChecklist = {
+  id: string;
+  title: string;
+};
+
 export type IdeaNode = {
   id: string;
   label: string;
@@ -17,9 +24,13 @@ export type IdeaNode = {
   x: number;
   y: number;
   childPageId?: string;
+  memoChildPageId?: string;
   sourceFiles?: IdeaSourceFile[];
   imageNotes?: IdeaImageNote[];
   supplementaryPoints?: IdeaSupplementaryPoint[];
+  status?: IdeaStatus;
+  checklistId?: string;
+  generatedGraphPageId?: string;
   fresh?: boolean;
 };
 
@@ -55,6 +66,12 @@ export type GraphPage = {
   parentNodeId?: string;
   nodes: IdeaNode[];
   edges: IdeaEdge[];
+  checklists?: IdeaChecklist[];
+  workspace?: "memo" | "graph";
+  sourceMemoPageId?: string;
+  sourceMemoNodeId?: string;
+  memoGraphPageId?: string;
+  sourceRootNodeId?: string;
   updatedLabel: string;
 };
 
@@ -65,8 +82,20 @@ export const INITIAL_LOGIC_GRAPH_PAGES: GraphPage[] = [
     id: "inbox",
     title: "灵感收集",
     level: 1,
+    workspace: "graph",
     nodes: [],
     edges: [],
+    checklists: [{ id: "inbox-default", title: "灵感清单" }],
+    updatedLabel: "等待第一个想法",
+  },
+  {
+    id: "memo-inbox",
+    title: "灵感收集",
+    level: 1,
+    workspace: "memo",
+    nodes: [],
+    edges: [],
+    checklists: [{ id: "memo-inbox-default", title: "灵感清单" }],
     updatedLabel: "等待第一个想法",
   },
 ];
@@ -164,9 +193,19 @@ type LogicGraphProps = {
   pages: GraphPage[];
   onPagesChange: (updater: (current: GraphPage[]) => GraphPage[]) => void;
   syncEnabled: boolean;
+  mode?: "graph" | "memo";
+  openPageId?: string | null;
+  onOpenGraphPage?: (pageId: string) => void;
 };
 
-export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled }: LogicGraphProps) {
+export default function LogicGraphPrototype({
+  pages,
+  onPagesChange,
+  syncEnabled,
+  mode = "graph",
+  openPageId = null,
+  onOpenGraphPage,
+}: LogicGraphProps) {
   const setPages = onPagesChange;
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -174,6 +213,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   const [connectSourceId, setConnectSourceId] = useState<string | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ x: 40, y: 25, scale: 0.82 });
   const [composerOpen, setComposerOpen] = useState(false);
+  const [inlineIdeaOpen, setInlineIdeaOpen] = useState(false);
   const [ideaContent, setIdeaContent] = useState("");
   const [ideaLabel, setIdeaLabel] = useState("");
   const [labelEdited, setLabelEdited] = useState(false);
@@ -182,6 +222,10 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   const [editPageId, setEditPageId] = useState<string | null>(null);
   const [editPageTitle, setEditPageTitle] = useState("");
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [contentView, setContentView] = useState<"checklist" | "graph">(mode === "memo" ? "checklist" : "graph");
+  const [newChecklistTitle, setNewChecklistTitle] = useState("");
+  const [checklistComposerOpen, setChecklistComposerOpen] = useState(false);
+  const [ideaChecklistId, setIdeaChecklistId] = useState("");
   const [deletePageId, setDeletePageId] = useState<string | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
   const [fileBusy, setFileBusy] = useState(false);
@@ -226,6 +270,15 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   const selectedChildPage = selectedNode?.childPageId
     ? pages.find((page) => page.id === selectedNode.childPageId) || null
     : null;
+  const selectedMemoChildPage = selectedNode?.memoChildPageId
+    ? pages.find((page) => page.id === selectedNode.memoChildPageId) || null
+    : null;
+  const activeChecklists = useMemo(() => {
+    if (!activePage) return [];
+    return activePage.checklists?.length
+      ? activePage.checklists
+      : [{ id: `${activePage.id}-default`, title: activePage.level === 1 ? "未分组清单" : "想法延伸" }];
+  }, [activePage]);
   const selectedImageNotes = useMemo(() => selectedNode?.imageNotes || [], [selectedNode?.imageNotes]);
 
   useEffect(() => {
@@ -265,18 +318,74 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
     };
   }, [selectedImageNotes, syncEnabled]);
 
-  const topLevelPages = useMemo(() => pages.filter((page) => page.level === 1), [pages]);
+  const topLevelPages = useMemo(
+    () => pages.filter((page) => {
+      if (page.level !== 1) return false;
+      if (mode === "memo") return page.workspace === "memo";
+      return page.workspace === "graph" || !page.workspace;
+    }),
+    [mode, pages],
+  );
+
+  useEffect(() => {
+    setPages((current) => {
+      let changed = false;
+      let next = current.map((page) => {
+        if (page.workspace || page.level !== 1) return page;
+        changed = true;
+        return { ...page, workspace: "graph" as const };
+      });
+      // 不再自动补建初始页：用户删除后就删光，不强制保留"灵感收集"
+      return changed ? next : current;
+    });
+    // Run once per workspace mount; the updater itself is supplied inline by the app shell.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "memo" || activePageId || !topLevelPages.length) return;
+    setActivePageId(topLevelPages[0].id);
+    setContentView("checklist");
+  }, [activePageId, mode, topLevelPages]);
+
+  useEffect(() => {
+    if (mode !== "graph" || !openPageId) return;
+    const page = pages.find((item) => item.id === openPageId && item.level === 1);
+    if (!page) return;
+    setActivePageId(page.id);
+    setSelectedNodeId(page.sourceRootNodeId || null);
+    setSelectedEdgeId(null);
+    setConnectSourceId(null);
+    setContentView("graph");
+    setViewport(pageViewports[page.id] || { x: 40, y: 25, scale: 0.82 });
+  }, [mode, openPageId]);
+
+  const memoChildPages = useMemo(
+    () => {
+      if (!activePage || activePage.level === 1) return [];
+      return pages
+        .filter((page) => page.parentPageId === activePage.id)
+        .map((page) => ({
+          ...page,
+          stat: `${page.nodes.length} 个想法`,
+        }));
+    },
+    [pages, activePage],
+  );
 
   const pageStats = useMemo(
     () =>
       topLevelPages.map((page) => ({
         ...page,
-        stat:
-          page.nodes.length === 0
+        stat: mode === "memo"
+          ? page.nodes.length === 0
+            ? `${page.checklists?.length || 1} 份清单 · 暂无思维点`
+            : `${page.checklists?.length || 1} 份清单 · ${page.nodes.length} 个思维点`
+          : page.nodes.length === 0
             ? "空白网图"
-            : `${page.nodes.length} 个圆点 · ${page.edges.length} 条连接`,
+            : `${page.nodes.length} 个思维点 · ${page.edges.length} 条连接`,
       })),
-    [topLevelPages],
+    [mode, topLevelPages],
   );
 
   const pagePath = (() => {
@@ -327,13 +436,23 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   );
 
   const summaryTotals = useMemo(
-    () => ({
-      pages: pages.length,
-      nodes: pages.reduce((total, page) => total + page.nodes.length, 0),
-      edges: pages.reduce((total, page) => total + page.edges.length, 0),
-      deepGraphs: pages.filter((page) => page.level > 1).length,
-    }),
-    [pages],
+    () => {
+      const visiblePageIds = new Set<string>();
+      const visit = (page: GraphPage) => {
+        if (visiblePageIds.has(page.id)) return;
+        visiblePageIds.add(page.id);
+        pages.filter((candidate) => candidate.parentPageId === page.id).forEach(visit);
+      };
+      topLevelPages.forEach(visit);
+      const visiblePages = pages.filter((page) => visiblePageIds.has(page.id));
+      return {
+        pages: visiblePages.length,
+        nodes: visiblePages.reduce((total, page) => total + page.nodes.length, 0),
+        edges: visiblePages.reduce((total, page) => total + page.edges.length, 0),
+        deepGraphs: visiblePages.filter((page) => page.level > 1).length,
+      };
+    },
+    [pages, topLevelPages],
   );
 
   function updateActivePage(updater: (page: GraphPage) => GraphPage) {
@@ -351,6 +470,8 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
     setSelectedNodeId(null);
     setSelectedEdgeId(null);
     setConnectSourceId(null);
+    const page = pages.find((item) => item.id === pageId);
+    setContentView(mode === "memo" && page?.level === 1 ? "checklist" : "graph");
     setViewport(pageViewports[pageId] || { x: 40, y: 25, scale: 0.82 });
   }
 
@@ -379,7 +500,16 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
     const id = uid("page");
     setPages((current) => [
       ...current,
-      { id, title, level: 1, nodes: [], edges: [], updatedLabel: "刚刚创建" },
+      {
+        id,
+        title,
+        level: 1,
+        workspace: mode,
+        nodes: [],
+        edges: [],
+        checklists: [{ id: `${id}-default`, title: "灵感清单" }],
+        updatedLabel: "刚刚创建",
+      },
     ]);
     setNewPageTitle("");
     setNewPageOpen(false);
@@ -413,14 +543,42 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   async function confirmDeletePage() {
     if (!deletePageId || deleteConfirmText.trim() !== "确认") return;
     const deletingIds = descendantPageIds(deletePageId);
+    const generatedRoots = pages.filter(
+      (page) => deletingIds.has(page.id) && page.sourceMemoPageId && page.sourceMemoNodeId,
+    );
     const fileIds = pages
       .filter((page) => deletingIds.has(page.id))
       .flatMap((page) => page.nodes)
       .flatMap((node) => [...(node.sourceFiles || []), ...(node.imageNotes || [])])
       .map((file) => file.id);
-    setPages((current) => current.filter((page) => !deletingIds.has(page.id)));
+    setPages((current) => current
+      .filter((page) => !deletingIds.has(page.id))
+      .map((page) => {
+        const linkedRoots = generatedRoots.filter((root) => root.sourceMemoPageId === page.id);
+        if (!linkedRoots.length) return page;
+        const linkedNodeIds = new Set(linkedRoots.map((root) => root.sourceMemoNodeId));
+        return {
+          ...page,
+          nodes: page.nodes.map((node) => linkedNodeIds.has(node.id)
+            ? { ...node, generatedGraphPageId: undefined }
+            : node),
+          updatedLabel: "刚刚更新",
+        };
+      }));
     setDeletePageId(null);
     setDeleteConfirmText("");
+    // 如果删除的是当前打开的页，自动切到第一个剩余的一级页（或回到目录）
+    if (activePageId === deletePageId) {
+      const remainingTop = topLevelPages.filter((page) => !deletingIds.has(page.id));
+      if (remainingTop.length) {
+        setActivePageId(remainingTop[0].id);
+        setSelectedNodeId(null);
+        setSelectedEdgeId(null);
+      } else {
+        setActivePageId(null);
+        setContentView(mode === "memo" ? "checklist" : "graph");
+      }
+    }
     await Promise.allSettled(
       fileIds.flatMap((id) => [
         removeGraphFile(id),
@@ -445,6 +603,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
       parentNodeId: selectedNode.id,
       nodes: [],
       edges: [],
+      checklists: [{ id: `${pageId}-default`, title: "想法延伸" }],
       updatedLabel: "等待第一个猜想",
     };
     setPages((current) =>
@@ -463,6 +622,136 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
         .concat(childPage),
     );
     window.setTimeout(() => openPageWithMotion(pageId, "deeper"), 0);
+  }
+
+  function createOrOpenMemoChild(nodeOverride?: IdeaNode) {
+    const node = nodeOverride || selectedNode;
+    if (!activePage || !node) return;
+    const existingChild = node.memoChildPageId
+      ? pages.find((page) => page.id === node.memoChildPageId) || null
+      : null;
+    if (existingChild) {
+      openPageWithMotion(existingChild.id, "deeper");
+      return;
+    }
+    if (activePage.level >= 3) return;
+    const pageId = uid("memo-sub");
+    const childPage: GraphPage = {
+      id: pageId,
+      title: node.label,
+      level: (activePage.level + 1) as 2 | 3,
+      parentPageId: activePage.id,
+      parentNodeId: node.id,
+      workspace: "memo",
+      nodes: [],
+      edges: [],
+      checklists: [{ id: `${pageId}-default`, title: "想法延伸" }],
+      updatedLabel: "等待第一个想法",
+    };
+    setPages((current) =>
+      current
+        .map((page) =>
+          page.id === activePage.id
+            ? {
+                ...page,
+                nodes: page.nodes.map((n) =>
+                  n.id === node.id ? { ...n, memoChildPageId: pageId } : n,
+                ),
+                updatedLabel: "刚刚更新",
+              }
+            : page,
+        )
+        .concat(childPage),
+    );
+    window.setTimeout(() => openPageWithMotion(pageId, "deeper"), 0);
+  }
+
+  async function createOrOpenMemoGraph() {
+    if (mode !== "memo" || !activePage || activePage.level !== 1) return;
+    if (activePage.memoGraphPageId) {
+      onOpenGraphPage?.(activePage.memoGraphPageId);
+      return;
+    }
+
+    const cloneAttachments = async (files: IdeaSourceFile[] | undefined, prefix: string) => {
+      const copies = await Promise.all((files || []).map(async (metadata) => {
+        let blob = await readGraphFile(metadata.id);
+        if (!blob && syncEnabled) blob = await readGraphFileFromCloud(metadata.id);
+        if (!blob) return null;
+        const id = uid(prefix);
+        const file = new File([blob], metadata.name, { type: blob.type || metadata.type });
+        await saveGraphFile(id, file);
+        if (syncEnabled) await uploadGraphFileToCloud(id, file);
+        return { ...metadata, id, uploadedAt: new Date().toISOString() };
+      }));
+      return copies.filter((file): file is IdeaSourceFile => Boolean(file));
+    };
+
+    // 递归：把备忘录层级树（memoPage + 其 nodes + memoChildPageId 子页）克隆成网图层级树
+    const buildGraphTree = async (memoPage: GraphPage, targetLevel: 1 | 2 | 3, parentNodeRef?: { pageId: string; nodeId: string }) => {
+      const newPageId = uid("memo-graph");
+      const clonedNodes: IdeaNode[] = [];
+      const subPages: GraphPage[] = [];
+
+      for (const node of memoPage.nodes) {
+        const [copiedFiles, copiedImages] = await Promise.all([
+          cloneAttachments(node.sourceFiles, "graph-file"),
+          cloneAttachments(node.imageNotes, "graph-image"),
+        ]);
+        const newNodeId = uid("memo-root");
+        // 螺旋排布：半径随数量增大，避免节点重叠
+        const angle = clonedNodes.length * 2.39996; // 黄金角
+        const radius = 90 + Math.floor(clonedNodes.length / 7) * 90;
+        const clonedNode: IdeaNode = {
+          ...node,
+          id: newNodeId,
+          x: 520 + Math.cos(angle) * radius,
+          y: 340 + Math.sin(angle) * radius,
+          childPageId: undefined,
+          memoChildPageId: undefined,
+          generatedGraphPageId: undefined,
+          checklistId: undefined,
+          sourceFiles: copiedFiles,
+          imageNotes: copiedImages,
+          fresh: true,
+        };
+        clonedNodes.push(clonedNode);
+
+        // 有子层级的想法：递归生成下级网图页
+        if (node.memoChildPageId && targetLevel < 3) {
+          const childMemoPage = pages.find((page) => page.id === node.memoChildPageId);
+          if (childMemoPage) {
+            const child = await buildGraphTree(childMemoPage, (targetLevel + 1) as 2 | 3, { pageId: newPageId, nodeId: newNodeId });
+            clonedNode.childPageId = child.rootId;
+            subPages.push(...child.allPages);
+          }
+        }
+      }
+
+      const rootPage: GraphPage = {
+        id: newPageId,
+        title: memoPage.title,
+        level: targetLevel,
+        workspace: "graph",
+        sourceMemoPageId: memoPage.id,
+        sourceRootNodeId: parentNodeRef?.nodeId,
+        parentPageId: parentNodeRef?.pageId,
+        parentNodeId: parentNodeRef?.nodeId,
+        nodes: clonedNodes,
+        edges: [],
+        checklists: [{ id: `${newPageId}-default`, title: "想法延伸" }],
+        updatedLabel: "刚从备忘录生成",
+      };
+      return { rootId: newPageId, allPages: [rootPage, ...subPages] };
+    };
+
+    const { rootId, allPages } = await buildGraphTree(activePage, 1);
+
+    setPages((current) => current
+      .map((page) => page.id === activePage.id
+        ? { ...page, memoGraphPageId: rootId, updatedLabel: "刚刚更新" }
+        : page)
+      .concat(allPages));
   }
 
   function goBackOneLevel() {
@@ -488,7 +777,25 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
     setIdeaContent("");
     setIdeaLabel("");
     setLabelEdited(false);
+    setIdeaChecklistId(activeChecklists[0]?.id || "");
     setComposerOpen(true);
+  }
+
+  function createChecklist() {
+    if (!activePage || activePage.level !== 1 || !newChecklistTitle.trim()) return;
+    const checklist = { id: uid("checklist"), title: newChecklistTitle.trim() };
+    updateActivePage((page) => ({
+      ...page,
+      checklists: [
+        ...(page.checklists?.length
+          ? page.checklists
+          : [{ id: `${page.id}-default`, title: "未分组清单" }]),
+        checklist,
+      ],
+      updatedLabel: "刚刚更新",
+    }));
+    setNewChecklistTitle("");
+    setChecklistComposerOpen(false);
   }
 
   function createIdea() {
@@ -504,6 +811,8 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
       x: centerX + offset * 28,
       y: centerY + offset * 22,
       supplementaryPoints: [{ id: uid("supplement"), text: "" }],
+      status: "black",
+      checklistId: ideaChecklistId || activeChecklists[0]?.id,
       fresh: true,
     };
     updateActivePage((page) => ({
@@ -512,6 +821,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
       updatedLabel: "刚刚更新",
     }));
     setComposerOpen(false);
+    setInlineIdeaOpen(false);
     setSelectedNodeId(node.id);
     window.setTimeout(() => {
       updateActivePage((page) => ({
@@ -564,16 +874,22 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
   }
 
   function updateSelectedNode(
-    fields: Partial<Pick<IdeaNode, "label" | "content" | "supplementaryPoints">>,
+    fields: Partial<Pick<IdeaNode, "label" | "content" | "supplementaryPoints" | "status" | "checklistId" | "sourceFiles" | "imageNotes">>,
   ) {
-    if (!selectedNodeId) return;
-    updateActivePage((page) => ({
-      ...page,
-      nodes: page.nodes.map((node) =>
-        node.id === selectedNodeId ? { ...node, ...fields } : node,
-      ),
-      updatedLabel: "刚刚更新",
-    }));
+    if (!selectedNodeId || !activePageId) return;
+    setPages((current) =>
+      current.map((page) => {
+        if (page.id !== activePageId) return page;
+        return {
+          ...page,
+          nodes: page.nodes.map((node) => {
+            if (node.id !== selectedNodeId) return node;
+            return { ...node, ...fields };
+          }),
+          updatedLabel: "刚刚更新",
+        };
+      }),
+    );
   }
 
   function currentSupplementaryPoints() {
@@ -681,15 +997,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
         if (syncEnabled) await uploadGraphFileToCloud(metadata.id, file);
         additions.push(metadata);
       }
-      updateActivePage((page) => ({
-        ...page,
-        nodes: page.nodes.map((node) =>
-          node.id === selectedNodeId
-            ? { ...node, sourceFiles: [...(node.sourceFiles || []), ...additions] }
-            : node,
-        ),
-        updatedLabel: "刚刚更新",
-      }));
+      updateSelectedNode({ sourceFiles: [...(selectedNode?.sourceFiles || []), ...additions] });
     } catch (error) {
       setFileError(error instanceof Error ? error.message : "文件保存失败，请重试。");
     } finally {
@@ -721,15 +1029,9 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
 
   async function removeSourceFile(fileId: string) {
     if (!selectedNodeId) return;
-    updateActivePage((page) => ({
-      ...page,
-      nodes: page.nodes.map((node) =>
-        node.id === selectedNodeId
-          ? { ...node, sourceFiles: (node.sourceFiles || []).filter((file) => file.id !== fileId) }
-          : node,
-      ),
-      updatedLabel: "刚刚更新",
-    }));
+    updateSelectedNode({
+      sourceFiles: (selectedNode?.sourceFiles || []).filter((file) => file.id !== fileId),
+    });
     await Promise.allSettled([
       removeGraphFile(fileId),
       ...(syncEnabled ? [removeGraphFileFromCloud(fileId)] : []),
@@ -778,15 +1080,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
         if (syncEnabled) await uploadGraphFileToCloud(metadata.id, file);
         additions.push(metadata);
       }
-      updateActivePage((page) => ({
-        ...page,
-        nodes: page.nodes.map((node) =>
-          node.id === selectedNodeId
-            ? { ...node, imageNotes: [...(node.imageNotes || []), ...additions] }
-            : node,
-        ),
-        updatedLabel: "刚刚更新",
-      }));
+      updateSelectedNode({ imageNotes: [...(selectedNode?.imageNotes || []), ...additions] });
     } catch (error) {
       setImageError(error instanceof Error ? error.message : "图片备注保存失败，请重试。");
     } finally {
@@ -796,15 +1090,9 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
 
   async function removeImageNote(imageId: string) {
     if (!selectedNodeId) return;
-    updateActivePage((page) => ({
-      ...page,
-      nodes: page.nodes.map((node) =>
-        node.id === selectedNodeId
-          ? { ...node, imageNotes: (node.imageNotes || []).filter((image) => image.id !== imageId) }
-          : node,
-      ),
-      updatedLabel: "刚刚更新",
-    }));
+    updateSelectedNode({
+      imageNotes: (selectedNode?.imageNotes || []).filter((image) => image.id !== imageId),
+    });
     await Promise.allSettled([
       removeGraphFile(imageId),
       ...(syncEnabled ? [removeGraphFileFromCloud(imageId)] : []),
@@ -952,6 +1240,232 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
     dragState.current = null;
   }
 
+  if (mode === "memo" && activePage) {
+    const memoLevelClass = activePage.level === 1
+      ? styles.memoStudioLevel1
+      : activePage.level === 2
+        ? styles.memoStudioLevel2
+        : styles.memoStudioLevel3;
+    return (
+      <section className={`${styles.memoStudio} ${memoLevelClass}`}>
+        <header className={styles.memoStudioHeader}>
+          <h2>{activePage.level === 1 ? "备忘录" : `第 ${activePage.level} 层 · ${activePage.title}`}</h2>
+          {activePage.level === 1 && (
+            <button className={styles.primaryButton} onClick={() => setNewPageOpen(true)}>＋ 新建备忘录</button>
+          )}
+        </header>
+
+        <div className={styles.memoStudioGrid}>
+          <aside className={styles.memoStudioDirectory}>
+            <strong>{activePage.level === 1 ? "备忘录目录" : "子备忘录目录"}</strong>
+            <div className={styles.memoStudioSearch}>⌕　搜索</div>
+            <div className={styles.memoStudioPages}>
+              {(activePage.level === 1 ? pageStats : memoChildPages).map((page, index) => (
+                <div
+                  key={page.id}
+                  className={`${styles.memoStudioPageRow} ${page.id === activePage.id ? styles.memoStudioPageActive : ""}`}
+                >
+                  <button className={styles.memoStudioPageMain} onClick={() => openPage(page.id)}>
+                    <span>{String(index + 1).padStart(2, "0")}</span>
+                    <div><b>{page.title}</b><small>{page.stat}</small></div>
+                  </button>
+                  <button
+                    className={styles.memoStudioPageDelete}
+                    onClick={() => requestDeletePage(page.id)}
+                    aria-label={`删除${activePage.level === 1 ? "备忘录" : "子备忘录"}${page.title}`}
+                    title={`删除${activePage.level === 1 ? "备忘录" : "子备忘录"}`}
+                  >×</button>
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          <main className={styles.memoStudioEditor}>
+            <header>
+              <div>
+                <small>{activePage.level === 1 ? "当前备忘录" : `第 ${activePage.level} 层想法`}</small>
+                <h3>{activePage.title}</h3>
+              </div>
+              <div className={styles.memoStudioEditorActions}>
+                {activePage.level > 1 && (
+                  <button className={styles.quietButton} onClick={goBackOneLevel}>← 返回上级</button>
+                )}
+                <button className={styles.quietButton} onClick={() => beginRenamePage(activePage.id)}>修改标题</button>
+                {activePage.level === 1 && (
+                  <button
+                    className={styles.memoStudioGenerateAll}
+                    onClick={createOrOpenMemoGraph}
+                  >
+                    {activePage.memoGraphPageId ? "进入对应网图" : "生成独立网图"}
+                  </button>
+                )}
+                <button
+                  className={styles.primaryButton}
+                  onClick={() => {
+                    setIdeaChecklistId(activeChecklists[0]?.id || "");
+                    setIdeaContent("");
+                    setIdeaLabel("");
+                    setLabelEdited(false);
+                    setInlineIdeaOpen(true);
+                  }}
+                >＋ 添加想法</button>
+              </div>
+            </header>
+
+            <div className={styles.memoStudioThoughts}>
+              {inlineIdeaOpen && (
+                <div className={styles.memoInlineIdea}>
+                  <textarea
+                    value={ideaContent}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setIdeaContent(value);
+                      if (!labelEdited) setIdeaLabel(compactLabel(value));
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        createIdea();
+                      } else if (event.key === "Escape") {
+                        setInlineIdeaOpen(false);
+                      }
+                    }}
+                    placeholder="输入想法，回车直接添加（Shift+回车换行）"
+                    autoFocus
+                  />
+                  <div className={styles.memoInlineIdeaActions}>
+                    <span>回车添加 · Esc 取消</span>
+                    <button className={styles.quietButton} onClick={() => setInlineIdeaOpen(false)}>取消</button>
+                    <button className={styles.primaryButton} onClick={createIdea} disabled={!ideaContent.trim()}>添加</button>
+                  </div>
+                </div>
+              )}
+              {activePage.nodes.map((node) => (
+                <button
+                  key={node.id}
+                  className={node.id === selectedNodeId ? styles.memoStudioThoughtActive : ""}
+                  onClick={() => setSelectedNodeId(node.id)}
+                  onDoubleClick={() => { setSelectedNodeId(node.id); createOrOpenMemoChild(node); }}
+                  title={activePage.level < 3 ? "双击进入该想法的子备忘录" : undefined}
+                >
+                  <i className={styles[`logicStatus${(node.status || "black")[0].toUpperCase()}${(node.status || "black").slice(1)}`]} />
+                  <span><strong>{node.label}</strong><small>{node.content}</small></span>
+                  <em>{(node.imageNotes || []).length} 图 · {(node.sourceFiles || []).length} 文件</em>
+                </button>
+              ))}
+              {!activePage.nodes.length && <p className={styles.memoStudioEmpty}>这份备忘录还没有想法。</p>}
+            </div>
+          </main>
+
+          <aside className={styles.memoStudioInspector}>
+            {selectedNode ? (
+              <>
+                <header>
+                  <div><small>思维点详情</small><h3>{selectedNode.label}</h3></div>
+                  <button aria-label="关闭思维点详情" onClick={() => setSelectedNodeId(null)}>×</button>
+                </header>
+                <section className={styles.memoStudioStatus}>
+                  <strong>状态</strong>
+                  <div>
+                    {([['red', '红·已完成'], ['orange', '橙·完成中'], ['green', '绿·未完成'], ['black', '黑·默认']] as Array<[IdeaStatus, string]>).map(([status, label]) => (
+                      <button key={status} className={(selectedNode.status || 'black') === status ? styles.memoStudioStatusActive : ''} onClick={() => updateSelectedNode({ status })}>
+                        <i className={styles[`logicStatus${status[0].toUpperCase()}${status.slice(1)}`]} />{label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+                <label className={styles.memoStudioField}>
+                  <span>思维点标题</span>
+                  <input value={selectedNode.label} onChange={(event) => updateSelectedNode({ label: Array.from(event.target.value).slice(0, 30).join('') })} />
+                </label>
+                <label className={styles.memoStudioField}>
+                  <span>完整想法</span>
+                  <textarea value={selectedNode.content} onChange={(event) => updateSelectedNode({ content: event.target.value })} />
+                </label>
+                <section className={styles.memoStudioAttachments}>
+                  <div><strong>图片备注</strong><small>{(selectedNode.imageNotes || []).length}/9</small></div>
+                  <label>＋ 添加图片<input type="file" accept="image/*" multiple disabled={imageBusy || (selectedNode.imageNotes || []).length >= 9} onChange={(event) => { attachImagesToSelectedNode(event.target.files); event.target.value = ''; }} /></label>
+                  {!!selectedNode.imageNotes?.length && <div className={styles.memoStudioImageGrid}>{selectedNode.imageNotes.map((image, index) => (
+                    <span className={styles.memoStudioImageCell} key={image.id}>
+                      <button onClick={() => imagePreviews[image.id] && window.open(imagePreviews[image.id], '_blank', 'noopener,noreferrer')}>{imagePreviews[image.id] ? <img src={imagePreviews[image.id]} alt={image.name} /> : '图片'}</button>
+                      <button aria-label={`删除图片备注${index + 1}`} className={styles.memoStudioImageRemove} onClick={() => removeImageNote(image.id)}>×</button>
+                    </span>
+                  ))}</div>}
+                </section>
+                <section className={styles.memoStudioAttachments}>
+                  <div><strong>相关文件</strong><small>{(selectedNode.sourceFiles || []).length} 个</small></div>
+                  <label>＋ 添加文件<input type="file" accept=".pdf,.docx,.txt,.md" multiple onChange={(event) => { attachFilesToSelectedNode(event.target.files); event.target.value = ''; }} /></label>
+                  {selectedNode.sourceFiles?.map((file) => (
+                    <span className={styles.memoStudioFileRow} key={file.id}>
+                      <button className={styles.memoStudioFile} onClick={() => openSourceFile(file)}>{file.name}</button>
+                      <button
+                        aria-label={`移除${file.name}`}
+                        className={styles.memoStudioFileRemove}
+                        onClick={() => removeSourceFile(file.id)}
+                      >×</button>
+                    </span>
+                  ))}
+                </section>
+                <button className={styles.memoStudioGenerate} onClick={createOrOpenMemoGraph}>
+                  <span><small>{activePage.memoGraphPageId ? '整篇备忘录已生成' : '将整篇备忘录生成一张网图'}</small><strong>{activePage.memoGraphPageId ? '进入对应网图' : '生成整篇网图'}</strong></span><b>→</b>
+                </button>
+                <button className={styles.memoStudioDeleteThought} onClick={deleteSelectedNode}>删除这个思维点</button>
+              </>
+            ) : (
+              <div className={styles.memoStudioInspectorEmpty}><span>○</span><h3>选择一个思维点</h3><p>在右侧记录完整想法、状态、图片和文件，或把它生成一张独立网图。</p></div>
+            )}
+          </aside>
+        </div>
+
+        {composerOpen && (
+          <div className={styles.logicOverlay} role="presentation" onMouseDown={() => setComposerOpen(false)}>
+            <section className={styles.logicDialog} role="dialog" aria-modal="true" aria-labelledby="memo-new-idea" onMouseDown={(event) => event.stopPropagation()}>
+              <p className={styles.eyebrow}>NEW THOUGHT</p><h3 id="memo-new-idea">记录一个思维点</h3>
+              <label><span>完整想法</span><textarea value={ideaContent} onChange={(event) => { const value = event.target.value; setIdeaContent(value); if (!labelEdited) setIdeaLabel(compactLabel(value)); }} autoFocus /></label>
+              <label><span>思维点标题（自动提取6字，手动最多30字符）</span><input value={ideaLabel} onChange={(event) => { setLabelEdited(true); setIdeaLabel(event.nativeEvent.isComposing ? event.target.value : Array.from(event.target.value).slice(0, 30).join('')); }} /></label>
+              <div className={styles.logicDialogActions}><button className={styles.quietButton} onClick={() => setComposerOpen(false)}>取消</button><button className={styles.primaryButton} onClick={createIdea} disabled={!ideaContent.trim()}>添加思维点</button></div>
+            </section>
+          </div>
+        )}
+        {newPageOpen && (
+          <div className={styles.logicOverlay} role="presentation" onMouseDown={() => setNewPageOpen(false)}>
+            <section className={styles.logicDialog} role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+              <p className={styles.eyebrow}>NEW MEMO</p><h3>新建备忘录</h3>
+              <label><span>备忘录名称</span><input value={newPageTitle} onChange={(event) => setNewPageTitle(event.target.value)} maxLength={30} autoFocus /></label>
+              <div className={styles.logicDialogActions}><button className={styles.quietButton} onClick={() => setNewPageOpen(false)}>取消</button><button className={styles.primaryButton} onClick={createPage} disabled={!newPageTitle.trim()}>创建备忘录</button></div>
+            </section>
+          </div>
+        )}
+        {editPageId && (
+          <div className={styles.logicOverlay} role="presentation" onMouseDown={() => setEditPageId(null)}>
+            <section className={styles.logicDialog} role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+              <p className={styles.eyebrow}>RENAME MEMO</p><h3>修改备忘录标题</h3>
+              <label><span>标题名称</span><input value={editPageTitle} onChange={(event) => setEditPageTitle(event.target.value)} maxLength={30} autoFocus /></label>
+              <div className={styles.logicDialogActions}><button className={styles.quietButton} onClick={() => setEditPageId(null)}>取消</button><button className={styles.primaryButton} onClick={savePageTitle} disabled={!editPageTitle.trim()}>保存标题</button></div>
+            </section>
+          </div>
+        )}
+        {deletePageId && (
+          <div className={styles.logicOverlay} role="presentation" onMouseDown={() => setDeletePageId(null)}>
+            <section className={styles.logicDialog} role="dialog" aria-modal="true" aria-labelledby="delete-memo-page" onMouseDown={(event) => event.stopPropagation()}>
+              <p className={styles.eyebrow}>危险操作</p>
+              <h3 id="delete-memo-page">删除“{pages.find((page) => page.id === deletePageId)?.title}”吗？</h3>
+              <p className={styles.logicDeleteWarning}>删除后，这篇备忘录的全部想法、图片和文件都无法恢复。</p>
+              <label>
+                <span>请输入“确认”</span>
+                <input value={deleteConfirmText} onChange={(event) => setDeleteConfirmText(event.target.value)} placeholder="确认" autoFocus />
+              </label>
+              <div className={styles.logicDialogActions}>
+                <button className={styles.quietButton} onClick={() => setDeletePageId(null)}>取消</button>
+                <button className={styles.dangerButton} onClick={confirmDeletePage} disabled={deleteConfirmText.trim() !== "确认"}>永久删除</button>
+              </div>
+            </section>
+          </div>
+        )}
+      </section>
+    );
+  }
+
   if (!activePage) {
     if (summaryOpen) {
       return (
@@ -1005,13 +1519,13 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
       <section className={styles.logicNotebook}>
         <header className={styles.logicNotebookHeader}>
           <div>
-            <p className={styles.eyebrow}>IDEA NOTEBOOK</p>
-            <h2>想法笔记本</h2>
-            <p>每个目录是一张独立网图，避免所有想法挤在同一张画布。</p>
+            <p className={styles.eyebrow}>{mode === "memo" ? "MEMO NOTEBOOK" : "MIND GRAPH"}</p>
+            <h2>{mode === "memo" ? "备忘录" : "网图目录"}</h2>
+            <p>{mode === "memo" ? "先记录备忘录；需要继续推演时，再把某个思维点生成独立网图。" : "每一页都是一张独立网图，可由思维点继续展开二、三级子网图。"}</p>
           </div>
           <div className={styles.logicNotebookActions}>
             <button className={styles.quietButton} onClick={() => setSummaryOpen(true)}>数据总结</button>
-            <button className={styles.primaryButton} onClick={() => setNewPageOpen(true)}>＋ 新建页面</button>
+            <button className={styles.primaryButton} onClick={() => setNewPageOpen(true)}>＋ {mode === "memo" ? "新建备忘录" : "新建网图"}</button>
           </div>
         </header>
 
@@ -1021,7 +1535,9 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
               <button className={styles.logicPageOpen} onClick={() => openPage(page.id)}>
                 <span className={styles.logicPageIndex}>{String(index + 1).padStart(2, "0")}</span>
                 <div>
-                  <small>{page.id === "inbox" ? "快速捕捉入口" : "独立网图页面"}</small>
+                  <small>{mode === "memo"
+                    ? (page.id === "inbox" ? "快速捕捉备忘录" : "独立备忘录")
+                    : (page.sourceMemoPageId ? "由备忘录思维点生成" : page.id === "inbox" ? "默认网图" : "独立网图")}</small>
                   <h3>{page.title}</h3>
                   <p>
                     {page.stat}
@@ -1054,14 +1570,14 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
           <div className={styles.logicOverlay} role="presentation" onMouseDown={() => setNewPageOpen(false)}>
             <section className={styles.logicDialog} role="dialog" aria-modal="true" aria-labelledby="new-graph-page" onMouseDown={(event) => event.stopPropagation()}>
               <p className={styles.eyebrow}>NEW PAGE</p>
-              <h3 id="new-graph-page">新建网图页面</h3>
+              <h3 id="new-graph-page">新建{mode === "memo" ? "备忘录" : "网图"}</h3>
               <label>
-                <span>页面名称</span>
+                <span>{mode === "memo" ? "备忘录" : "网图"}名称</span>
                 <input value={newPageTitle} onChange={(event) => setNewPageTitle(event.target.value)} maxLength={18} placeholder="例如：内容方向" autoFocus />
               </label>
               <div className={styles.logicDialogActions}>
                 <button className={styles.quietButton} onClick={() => setNewPageOpen(false)}>取消</button>
-                <button className={styles.primaryButton} onClick={createPage} disabled={!newPageTitle.trim()}>创建页面</button>
+                <button className={styles.primaryButton} onClick={createPage} disabled={!newPageTitle.trim()}>创建{mode === "memo" ? "备忘录" : "网图"}</button>
               </div>
             </section>
           </div>
@@ -1096,7 +1612,9 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
             <section className={styles.logicDialog} role="dialog" aria-modal="true" aria-labelledby="delete-graph-page" onMouseDown={(event) => event.stopPropagation()}>
               <p className={styles.eyebrow}>危险操作</p>
               <h3 id="delete-graph-page">删除“{pages.find((page) => page.id === deletePageId)?.title}”吗？</h3>
-              <p className={styles.logicDeleteWarning}>删除后，这张网图的圆点、连线、源文件关联以及全部二、三级子网图都无法恢复。</p>
+              <p className={styles.logicDeleteWarning}>{mode === "memo"
+                ? "删除后，这篇备忘录的全部想法、图片和文件都无法恢复。"
+                : "删除后，这张网图的圆点、连线、源文件关联以及全部二、三级子网图都无法恢复。"}</p>
               <label>
                 <span>请输入“确认”</span>
                 <input value={deleteConfirmText} onChange={(event) => setDeleteConfirmText(event.target.value)} placeholder="确认" autoFocus />
@@ -1151,7 +1669,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
             <button aria-label="放大网图" onClick={() => setViewport((current) => ({ ...current, scale: Math.min(1.8, current.scale + 0.12) }))}>＋</button>
             <button onClick={() => setViewport({ x: 40, y: 25, scale: 0.82 })}>复位</button>
           </div>
-          <button className={styles.logicAddButton} onClick={openComposer}>＋ 想法</button>
+          <button className={styles.logicAddButton} onClick={openComposer}>＋ 思维点</button>
         </div>
       </div>
 
@@ -1184,6 +1702,78 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
           <button onClick={() => setConnectSourceId(null)}>取消</button>
         </div>
       )}
+
+      {mode === "memo" && activePage.level === 1 && contentView === "checklist" ? (
+        <div className={styles.logicChecklistWorkspace}>
+          <header className={styles.logicChecklistWorkspaceHeader}>
+            <div>
+              <span>MEMO STRUCTURE</span>
+              <h3>{activePage.title}</h3>
+              <p>备忘录负责整理思维点；只有主动点击生成的思维点，才会在思维网图目录中建立独立网图。</p>
+            </div>
+            <button className={styles.primaryButton} onClick={() => setChecklistComposerOpen(true)}>＋ 新建清单</button>
+          </header>
+
+          <div className={styles.logicChecklistGrid}>
+            {activeChecklists.map((checklist, checklistIndex) => {
+              const checklistNodes = activePage.nodes.filter((node) =>
+                node.checklistId ? node.checklistId === checklist.id : checklistIndex === 0,
+              );
+              return (
+                <section className={styles.logicChecklistCard} key={checklist.id}>
+                  <header>
+                    <span>{String(checklistIndex + 1).padStart(2, "0")}</span>
+                    <div><small>清单</small><h4>{checklist.title}</h4></div>
+                    <b>{checklistNodes.length} 个思维点</b>
+                  </header>
+                  <div className={styles.logicChecklistItems}>
+                    {checklistNodes.length ? checklistNodes.map((node) => (
+                      <button
+                        key={node.id}
+                        onClick={() => {
+                          setContentView("graph");
+                          setSelectedNodeId(node.id);
+                        }}
+                      >
+                        <i className={styles[`logicStatus${(node.status || "black")[0].toUpperCase()}${(node.status || "black").slice(1)}`]} />
+                        <span><strong>{node.label}</strong><small>{node.content}</small></span>
+                        <em>{(node.imageNotes || []).length} 图 · {(node.sourceFiles || []).length} 文件</em>
+                        <b>查看 →</b>
+                      </button>
+                    )) : (
+                      <div className={styles.logicChecklistEmpty}>这份清单还没有思维点。</div>
+                    )}
+                  </div>
+                  <button
+                    className={styles.logicChecklistAdd}
+                    onClick={() => {
+                      setIdeaChecklistId(checklist.id);
+                      setIdeaContent("");
+                      setIdeaLabel("");
+                      setLabelEdited(false);
+                      setComposerOpen(true);
+                    }}
+                  >＋ 添加想法</button>
+                </section>
+              );
+            })}
+          </div>
+
+          {checklistComposerOpen && (
+            <div className={styles.logicInlineComposer}>
+              <input
+                value={newChecklistTitle}
+                onChange={(event) => setNewChecklistTitle(event.target.value)}
+                maxLength={30}
+                placeholder="输入清单名称"
+                autoFocus
+              />
+              <button className={styles.quietButton} onClick={() => setChecklistComposerOpen(false)}>取消</button>
+              <button className={styles.primaryButton} onClick={createChecklist} disabled={!newChecklistTitle.trim()}>创建清单</button>
+            </div>
+          )}
+        </div>
+      ) : (
 
       <div
         ref={canvasRef}
@@ -1256,7 +1846,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
                 : null;
               return (
                 <g
-                  className={`${styles.logicNode} ${selected ? styles.logicNodeSelected : ""} ${node.fresh ? styles.logicNodeFresh : ""}`}
+                  className={`${styles.logicNode} ${selected ? styles.logicNodeSelected : ""} ${node.fresh ? styles.logicNodeFresh : ""} ${styles[`logicNodeStatus${(node.status || "black")[0].toUpperCase()}${(node.status || "black").slice(1)}`]}`}
                   key={node.id}
                   transform={`translate(${node.x} ${node.y})`}
                   onPointerDown={(event) => beginNodeDrag(event, node)}
@@ -1306,6 +1896,40 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
                   <span>完整想法</span>
                   <textarea value={selectedNode.content} onChange={(event) => updateSelectedNode({ content: event.target.value })} />
                 </label>
+                <section className={styles.logicThoughtMeta}>
+                  <div>
+                    <strong>思维点状态</strong>
+                    <small>颜色只标记当前思维点，不代表整份清单。</small>
+                  </div>
+                  <div className={styles.logicStatusPicker}>
+                    {([
+                      ["red", "重点"],
+                      ["orange", "推进中"],
+                      ["green", "已验证"],
+                      ["black", "普通"],
+                    ] as Array<[IdeaStatus, string]>).map(([status, label]) => (
+                      <button
+                        key={status}
+                        className={selectedNode.status === status || (!selectedNode.status && status === "black") ? styles.logicStatusSelected : ""}
+                        onClick={() => updateSelectedNode({ status })}
+                      >
+                        <i className={styles[`logicStatus${status[0].toUpperCase()}${status.slice(1)}`]} />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {activePage.level === 1 && (
+                    <label>
+                      <span>所属清单</span>
+                      <select
+                        value={selectedNode.checklistId || activeChecklists[0]?.id || ""}
+                        onChange={(event) => updateSelectedNode({ checklistId: event.target.value })}
+                      >
+                        {activeChecklists.map((checklist) => <option key={checklist.id} value={checklist.id}>{checklist.title}</option>)}
+                      </select>
+                    </label>
+                  )}
+                </section>
                 <section className={styles.logicSupplementaryPoints}>
                   <div className={styles.logicSupplementaryHeader}>
                     <span>
@@ -1415,7 +2039,15 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
                   )}
                   {fileError && <p className={styles.logicFileError}>{fileError}</p>}
                 </section>
-                {activePage.level < 3 ? (
+                {mode === "memo" && activePage.level === 1 ? (
+                  <button className={styles.logicChildButton} onClick={createOrOpenMemoGraph}>
+                    <span>
+                      <small>{activePage.memoGraphPageId ? "整篇备忘录已生成" : "继续推演整篇备忘录"}</small>
+                      <strong>{activePage.memoGraphPageId ? "前往思维网图查看和扩展" : "生成整篇网图"}</strong>
+                    </span>
+                    <b>{activePage.memoGraphPageId ? "进入 →" : "＋"}</b>
+                  </button>
+                ) : activePage.level < 3 ? (
                   <button className={styles.logicChildButton} onClick={createOrOpenChildGraph}>
                     <span>
                       <small>{selectedChildPage ? `第 ${selectedChildPage.level} 层网图` : "继续展开"}</small>
@@ -1463,6 +2095,7 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
           </aside>
         )}
       </div>
+      )}
 
       {composerOpen && (
         <div className={styles.logicOverlay} role="presentation" onMouseDown={() => setComposerOpen(false)}>
@@ -1489,6 +2122,14 @@ export default function LogicGraphPrototype({ pages, onPagesChange, syncEnabled 
                 placeholder="系统会自动截取，可修改"
               />
             </label>
+            {activePage.level === 1 && activeChecklists.length > 0 && (
+              <label>
+                <span>加入清单</span>
+                <select value={ideaChecklistId || activeChecklists[0].id} onChange={(event) => setIdeaChecklistId(event.target.value)}>
+                  {activeChecklists.map((checklist) => <option key={checklist.id} value={checklist.id}>{checklist.title}</option>)}
+                </select>
+              </label>
+            )}
             <small>完整原文会保留在圆点详情中。</small>
             <div className={styles.logicDialogActions}>
               <button className={styles.quietButton} onClick={() => setComposerOpen(false)}>取消</button>
