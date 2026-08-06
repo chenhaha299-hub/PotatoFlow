@@ -831,7 +831,6 @@ export default function LogicGraphPrototype({
     }));
     setComposerOpen(false);
     setInlineIdeaOpen(false);
-    setSelectedNodeId(node.id);
     window.setTimeout(() => {
       updateActivePage((page) => ({
         ...page,
@@ -1353,9 +1352,8 @@ export default function LogicGraphPrototype({
                 <button
                   key={node.id}
                   className={node.id === selectedNodeId ? styles.memoStudioThoughtActive : ""}
-                  onClick={() => setSelectedNodeId(node.id)}
-                  onDoubleClick={() => { setSelectedNodeId(node.id); createOrOpenMemoChild(node); }}
-                  title={activePage.level < 3 ? "双击进入该想法的子备忘录" : undefined}
+                  onDoubleClick={() => setSelectedNodeId(node.id)}
+                  title={activePage.level < 3 ? "双击查看思维点详情" : undefined}
                 >
                   <i className={styles[`logicStatus${(node.status || "black")[0].toUpperCase()}${(node.status || "black").slice(1)}`]} />
                   <span><strong>{node.label}</strong><small>{node.content}</small></span>
@@ -1376,7 +1374,7 @@ export default function LogicGraphPrototype({
                 <section className={styles.memoStudioStatus}>
                   <strong>状态</strong>
                   <div>
-                    {([['red', '红·已完成'], ['orange', '橙·完成中'], ['green', '绿·未完成'], ['black', '黑·默认']] as Array<[IdeaStatus, string]>).map(([status, label]) => (
+                    {([['red', '已完成'], ['orange', '完成中'], ['green', '未完成'], ['black', '默认']] as Array<[IdeaStatus, string]>).map(([status, label]) => (
                       <button key={status} className={(selectedNode.status || 'black') === status ? styles.memoStudioStatusActive : ''} onClick={() => updateSelectedNode({ status })}>
                         <i className={styles[`logicStatus${status[0].toUpperCase()}${status.slice(1)}`]} />{label}
                       </button>
@@ -1418,6 +1416,11 @@ export default function LogicGraphPrototype({
                 <button className={styles.memoStudioGenerate} onClick={createOrOpenMemoGraph}>
                   <span><small>{activePage.memoGraphPageId ? '整篇备忘录已生成' : '将整篇备忘录生成一张网图'}</small><strong>{activePage.memoGraphPageId ? '进入对应网图' : '生成整篇网图'}</strong></span><b>→</b>
                 </button>
+                {activePage.level < 3 && (
+                  <button className={styles.memoStudioGenerate} onClick={() => createOrOpenMemoChild(selectedNode)}>
+                    <span><small>{selectedNode.memoChildPageId ? "已有子备忘录" : "为这个想法建立子备忘录"}</small><strong>{selectedNode.memoChildPageId ? "进入子备忘录" : "建立子备忘录"}</strong></span><b>→</b>
+                  </button>
+                )}
                 <button className={styles.memoStudioDeleteThought} onClick={deleteSelectedNode}>删除这个思维点</button>
               </>
             ) : (
@@ -1873,7 +1876,7 @@ export default function LogicGraphPrototype({
                       <text textAnchor="middle" dominantBaseline="central">{childPage.nodes.length}</text>
                     </g>
                   )}
-                  <text x="0" y="43" textAnchor="middle">{node.label}</text>
+                  <text x="0" y="43" textAnchor="middle">{node.label.length > 8 ? node.label.slice(0, 8) + "…" : node.label}</text>
                 </g>
               );
             })}
