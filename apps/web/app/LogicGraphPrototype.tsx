@@ -1374,7 +1374,7 @@ export default function LogicGraphPrototype({
                 <section className={styles.memoStudioStatus}>
                   <strong>状态</strong>
                   <div>
-                    {([['red', '已完成'], ['orange', '完成中'], ['green', '未完成'], ['black', '默认']] as Array<[IdeaStatus, string]>).map(([status, label]) => (
+                    {([['red', '重点'], ['orange', '推进中'], ['green', '已验证'], ['black', '普通']] as Array<[IdeaStatus, string]>).map(([status, label]) => (
                       <button key={status} className={(selectedNode.status || 'black') === status ? styles.memoStudioStatusActive : ''} onClick={() => updateSelectedNode({ status })}>
                         <i className={styles[`logicStatus${status[0].toUpperCase()}${status.slice(1)}`]} />{label}
                       </button>
