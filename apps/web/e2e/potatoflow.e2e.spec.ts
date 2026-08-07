@@ -153,7 +153,7 @@ test("空白状态、导航和响应式布局可用", async ({ page }) => {
   await expect(page.getByText("这里会出现你的项目结构")).toBeVisible();
   await navigateTo(page, "问题");
   await expect(page.getByText("还没有执行问题")).toBeVisible();
-  await page.getByRole("button", { name: /逻辑网图|网图/ }).click();
+  await page.getByRole("button", { name: /思维网图|网图/ }).click();
   await expect(page.getByRole("heading", { name: "想法笔记本" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
 });
@@ -256,8 +256,8 @@ test("自定义重复任务和日历快速改期可用", async ({ page }) => {
   await expect(page.getByText(/日期已修改|已移动/)).toBeVisible();
 });
 
-test("逻辑网图支持页面、圆点、连线、子网图和安全删除", async ({ page }) => {
-  await page.getByRole("button", { name: /逻辑网图|网图/ }).click();
+test("思维网图支持页面、圆点、连线、子网图和安全删除", async ({ page }) => {
+  await page.getByRole("button", { name: /思维网图|网图/ }).click();
   await page.getByRole("button", { name: "＋ 新建页面" }).click();
   await page.getByLabel("页面名称").fill("自动化验收");
   await page.getByRole("button", { name: "创建页面" }).click();
@@ -286,7 +286,7 @@ test("逻辑网图支持页面、圆点、连线、子网图和安全删除", as
   await expect(page.getByRole("button", { name: /查看图片备注1/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /查看图片备注2/ })).toBeVisible();
   await page.reload();
-  await page.getByRole("button", { name: /逻辑网图|网图/ }).click();
+  await page.getByRole("button", { name: /思维网图|网图/ }).click();
   await page.getByText("自动化验收已改名", { exact: true }).click();
   await selectGraphNode(page, "自动化验收已改名网图", "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
   await expect(page.getByRole("button", { name: /查看图片备注1/ })).toBeVisible();
