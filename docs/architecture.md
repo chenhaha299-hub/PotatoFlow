@@ -5,11 +5,17 @@ PotatoFlow is a single-user, self-hosted execution system.
 ## Components
 
 - `skills/potatoflow`: Codex workflow and deterministic client scripts.
-- `apps/web`: responsive local-first PWA for projects, calendar, tasks, and issue capture.
-- `workers/api`: future Cloudflare Worker API.
-- `database`: future Cloudflare D1 migrations.
+- `apps/web`: responsive local-first PWA with six modules: today, calendar, projects, issues, mind graph, and memo studio. Optional cloud sync via `apps/web/worker/index.ts` (Cloudflare Worker) and D1 (`apps/web/db/`), with `apps/web/db/sync-store.ts` handling version conflicts and history.
+- `apps/web/worker/index.ts`: Cloudflare Worker API for authenticated sync (stable user identity from the ChatGPT account; client-submitted user IDs are rejected).
+- `apps/web/db`: D1 schema and migrations for the cloud snapshot store.
 
-The Skill CLI uses a local JSON store. The first web implementation uses an empty browser-local store. Both follow the same project, task, and issue shapes so a later HTTP adapter can preserve the data contract.
+### Mind graph & memo studio
+
+- **Mind graph**: canvas-based visual network — draggable nodes, edges, zoom/pan, per-node status and child pages, standalone graph generation. Node labels are truncated on canvas (8 chars + ellipsis); full text lives in the detail panel.
+- **Memo studio**: hierarchical memos (1–3 levels), ideas with four statuses (重点/推进中/已验证/普通), image notes (up to 9), attached files, double-click detail panel, and one-click memo → mind graph generation.
+- Both modules render into a single `PotatoFlowApp.tsx` with responsive CSS: on mobile, inspector panels become fixed overlays (scrolling isolated from the background).
+
+The Skill CLI uses a local JSON store. The web app starts with an empty browser-local store and can sync to the D1 cloud snapshot after the user logs in and explicitly chooses the sync direction. Both follow the same project, task, and issue shapes; the sync adapter preserves the data contract.
 
 Task execution uses three levels: projects contain milestone groups, milestone groups contain
 checkable tasks, and tasks contain read-only steps and acceptance criteria. Only the task-level

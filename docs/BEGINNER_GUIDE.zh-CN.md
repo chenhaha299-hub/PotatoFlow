@@ -7,7 +7,7 @@
 PotatoFlow 不是一个已经托管好的在线账号系统，它由三个部分组成：
 
 1. **PotatoFlow Skill**：安装到 Codex，负责提问、梳理项目、生成和更新任务 JSON。
-2. **PotatoFlow 网页**：在浏览器里显示今天任务、日历、项目、问题和执行进度。
+2. **PotatoFlow 网页**：在浏览器里执行和记录——今天任务、日历、项目、问题，以及思维网图和备忘录两个整理模块。
 3. **项目 JSON**：Skill 与网页之间交换项目内容的文本。通常只需要复制和粘贴，不需要看懂或手写。
 
 最简单的工作方式是：
@@ -22,10 +22,10 @@ PotatoFlow 不是一个已经托管好的在线账号系统，它由三个部分
 
 ## 2. 你应该下载哪一个文件
 
-进入 [PotatoFlow v0.6.1 发布页面](https://github.com/chenhaha299-hub/PotatoFlow/releases/tag/v0.6.1)，可以看到两个下载包：
+进入 [PotatoFlow 发布页面](https://github.com/chenhaha299-hub/PotatoFlow/releases)，选择最新版本，可以看到两个下载包：
 
-- `potatoflow-skill-v0.6.1.zip`：只包含 Skill。只想让 Codex 帮你规划项目时下载这个。
-- `PotatoFlow-source-v0.6.1.zip`：完整源码，包含 Skill、网页、教程和测试。需要使用任务网页时下载这个。
+- `potatoflow-skill-<版本号>.zip`：只包含 Skill。只想让 Codex 帮你规划项目时下载这个。
+- `PotatoFlow-source-<版本号>.zip`：完整源码，包含 Skill、网页、教程和测试。需要使用任务网页时下载这个。
 
 如果你希望完整使用 PotatoFlow，建议两个都安装：
 
@@ -65,7 +65,7 @@ PotatoFlow 不是一个已经托管好的在线账号系统，它由三个部分
 
 #### Windows
 
-1. 下载 `potatoflow-skill-v0.6.1.zip`。
+1. 从最新发布页面下载 `potatoflow-skill-<版本号>.zip`。
 2. 解压后找到 `potatoflow` 文件夹。
 3. 按 `Win + R`。
 4. 输入 `%USERPROFILE%\.codex\skills`，按回车。
@@ -129,7 +129,7 @@ npm -v
 
 ### 4.2 解压完整源码
 
-1. 下载 `PotatoFlow-source-v0.6.1.zip`。
+1. 从最新发布页面下载 `PotatoFlow-source-<版本号>.zip`。
 2. 解压到一个容易找到的目录，例如：
 
 ```text
@@ -272,6 +272,8 @@ Skill 不会立刻生成最终 JSON，而是先给你一份项目摘要。重点
 - “项目”页面出现新项目。
 - “日历”页面能看到任务日期。
 - 打开任务能看到为什么做、执行步骤和完成标准。
+
+导入完成后，你还可以在底部导航进入“思维网图”把想法组织成可视化网络，或在“备忘录”里按层级整理想法并一键生成网图。
 
 ## 6. 每天怎么使用
 
