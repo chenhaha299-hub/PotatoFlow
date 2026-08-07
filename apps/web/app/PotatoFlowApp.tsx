@@ -3169,7 +3169,6 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       resetImportSources();
       setImportOpen(false);
       setActiveTab("projects");
-      setSelectedPlanProjectId(importPreview.projectId);
     } catch (error) {
       await Promise.allSettled(storedIds.map(deleteStoredSourceFile));
       if (syncEnabled) {
@@ -4596,51 +4595,6 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
           ) : null}
         </header>
 
-        {(activeTab === "today" || activeTab === "projects") && <section
-          className={`${styles.syncBar} ${
-            syncStatus === "offline" || syncStatus === "error"
-              ? styles.syncBarWarning
-              : ""
-          }`}
-          aria-live="polite"
-        >
-          <div>
-            <span className={styles.syncDot} aria-hidden="true" />
-            <div>
-              <strong>{syncStatusLabel}</strong>
-              <small>
-                {syncEnabled
-                  ? "任务、进度、备注、问题和 Word、PDF 原文件都会在你的设备间同步。"
-                  : "登录同一个 ChatGPT 账号，即可在电脑和手机查看同一份任务数据。"}
-              </small>
-            </div>
-          </div>
-          {syncEnabled ? (
-            <div className={styles.syncBarActions}>
-              {(syncStatus === "offline" || syncStatus === "local") && (
-                <button
-                  className={styles.quietButton}
-                  onClick={() => setSyncRetry((value) => value + 1)}
-                >
-                  重新连接
-                </button>
-              )}
-              <a
-                className={styles.syncTextLink}
-                href="/signout-with-chatgpt?return_to=%2F"
-              >
-                退出登录
-              </a>
-            </div>
-          ) : (
-            <a
-              className={styles.primaryButton}
-              href="/signin-with-chatgpt?return_to=%2F"
-            >
-              登录并开启同步
-            </a>
-          )}
-        </section>}
 
         {activeTab === "today" && (
           <section
@@ -4870,60 +4824,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               )}
             </div>
 
-            <aside
-              className={`${styles.contextPanel} ${
-                contextProject ? styles.contextPanelInteractive : ""
-              }`}
-              role={contextProject ? "button" : undefined}
-              tabIndex={contextProject ? 0 : undefined}
-              aria-label={
-                contextProject
-                  ? `打开 ${contextProject.name} 项目总览`
-                  : "执行提示"
-              }
-              onClick={() =>
-                setSelectedPlanProjectId(contextProject?.id || null)
-              }
-              onKeyDown={(event) => {
-                if (
-                  contextProject &&
-                  (event.key === "Enter" || event.key === " ")
-                ) {
-                  event.preventDefault();
-                  setSelectedPlanProjectId(contextProject.id);
-                }
-              }}
-            >
-              <div className={styles.contextMark}>→</div>
-              <p className={styles.eyebrow}>
-                {contextProject?.name || "执行提示"}
-              </p>
-              {planEntryProjects.length > 1 && (
-                <select
-                  className={styles.contextProjectSelect}
-                  aria-label="选择要查看执行提示的项目"
-                  value={contextProject?.id || ""}
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                  onChange={(event) => {
-                    event.stopPropagation();
-                    setSelectedTipProjectId(event.target.value);
-                  }}
-                >
-                  {planEntryProjects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <h2>{contextTipTitle}</h2>
-              <ul>
-                {contextTips.map((tip) => (
-                  <li key={tip}>{tip}</li>
-                ))}
-              </ul>
-            </aside>
+            
           </section>
         )}
 

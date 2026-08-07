@@ -1884,7 +1884,7 @@ export default function LogicGraphPrototype({
         </svg>
 
         {(selectedNode || selectedEdge) && (
-          <aside className={styles.logicInspector} onPointerDown={(event) => event.stopPropagation()}>
+          <aside className={styles.logicInspector} onPointerDown={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()}>
             {selectedNode ? (
               <>
                 <div className={styles.logicInspectorHeader}>
