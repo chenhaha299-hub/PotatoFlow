@@ -6432,7 +6432,7 @@
 }
 
 .logicCanvasArrive {
-  animation: logic-canvas-arrive 260ms cubic-bezier(0.22, 0.8, 0.3, 1) both;
+  animation: logic-canvas-arrive 260ms cubic-bezier(0.22, 0.8, 0.3, 1) backwards;
 }
 
 .logicCanvas:active {
@@ -7722,9 +7722,11 @@
   .logicInspector {
     position: fixed;
     z-index: 80;
+    top: 10px;
     right: 10px;
     bottom: 10px;
-    width: calc(100% - 20px);
+    width: calc(100vw - 20px);
+    max-height: calc(100dvh - 20px);
     border-radius: 18px;
     padding: 16px;
   }

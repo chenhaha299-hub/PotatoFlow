@@ -8704,7 +8704,7 @@ function GettingStarted({
           <b>02</b>
           <div>
             <strong>回答问题并确认规划</strong>
-            <span>确认目标、成功标准、时间和任务节奏。</span>
+            <span>自然说明想做什么、目前情况和安排偏好，由 AI 帮你归纳成任务。</span>
           </div>
         </li>
         <li>

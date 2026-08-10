@@ -103,7 +103,8 @@ async function navigateTo(page: Page, label: string) {
 }
 
 async function selectGraphNode(page: Page, graphName: string, label: string) {
-  const text = page.getByLabel(graphName).getByText(label, { exact: true });
+  const visibleLabel = label.length > 8 ? `${label.slice(0, 8)}…` : label;
+  const text = page.getByLabel(graphName).getByText(visibleLabel, { exact: true });
   const group = text.locator("xpath=..");
   const hitbox = group.locator("circle").last();
   const usesTouch = await page.evaluate(() => matchMedia("(pointer: coarse)").matches);
@@ -303,7 +304,10 @@ test("发布表单与任务编辑全局精简，详情保留执行功能", async
 
 test("JSON 导入、文件关联、任务执行、问题与持久化形成闭环", async ({ page }) => {
   await importProject(page, true);
-  await page.getByRole("button", { name: "关闭项目规划" }).click();
+  const closeProjectPlanning = page.getByRole("button", { name: "关闭项目规划" });
+  if (await closeProjectPlanning.isVisible().catch(() => false)) {
+    await closeProjectPlanning.click();
+  }
   await page.getByRole("button", { name: /验证完整执行流程/ }).first().click();
   await expect(page.getByRole("heading", { name: "验证完整执行流程" })).toBeVisible();
   await expect(page.getByText("源文件 1")).toBeVisible();
@@ -358,18 +362,18 @@ test("JSON 导入、文件关联、任务执行、问题与持久化形成闭环
 
 test("自定义重复任务和日历快速改期可用", async ({ page }) => {
   await page.getByRole("button", { name: /导入项目/ }).first().click();
-  await page.getByRole("button", { name: "＋ 自定义任务" }).click();
-  await page.getByLabel("任务标题 *").fill("每个工作日复盘");
-  await page.getByLabel("任务详情 / 要达成的结果").fill("工作日结束前记录当天结果");
+  await page.getByRole("button", { name: "＋ 手动创建" }).click();
+  await page.getByRole("button", { name: /独立任务/ }).click();
+  await page
+    .getByText("任务名（子任务标题）*", { exact: true })
+    .locator("xpath=..")
+    .getByRole("textbox")
+    .fill("每个工作日复盘");
   await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
   await page.getByRole("textbox", { name: "执行步骤 1", exact: true }).fill("记录完成事项");
   await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
   await page.getByRole("textbox", { name: "执行步骤 2", exact: true }).fill("写下明日重点");
-  await page.getByLabel("时间安排").selectOption("weekdays");
-  const dateInputs = page.locator('input[type="date"]');
-  await dateInputs.nth(0).fill("2026-08-03");
-  await dateInputs.nth(1).fill("2026-08-07");
-  await page.getByRole("button", { name: "创建到首页" }).click();
+  await page.getByRole("button", { name: "创建任务", exact: true }).click();
   await expect(page.getByText("每个工作日复盘", { exact: true })).toBeVisible();
 
   await page.getByText("每个工作日复盘", { exact: true }).click();
@@ -381,18 +385,21 @@ test("自定义重复任务和日历快速改期可用", async ({ page }) => {
   }
   await page.getByRole("button", { name: "编辑任务" }).click();
   await page.getByLabel("编辑任务标题").fill("每个工作日复盘（已编辑）");
-  await page.getByLabel("编辑任务分块").fill("第一阶段｜日常复盘");
   await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
   await page.getByRole("textbox", { name: "执行步骤 3", exact: true }).fill("归档复盘记录");
+  await page.getByLabel("编辑任务重复方式").selectOption("weekdays");
+  await page.getByLabel("编辑任务开始日期").fill("2026-08-03");
+  await page.getByLabel("编辑任务结束日期").fill("2026-08-07");
   await page.getByRole("button", { name: "关闭任务详情" }).click();
   await page
     .locator('[role="alertdialog"]:visible')
     .getByRole("button", { name: "保存并退出", exact: true })
     .click();
+  await navigateTo(page, "项目");
   await expect(page.getByText("每个工作日复盘（已编辑）", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /日历/ }).click();
-  await page.locator('[role="button"][aria-label*="1 项任务"]:visible').click();
+  await navigateTo(page, "日历");
+  await page.locator('[role="button"][aria-label*="1 项任务"]:visible').first().click();
   await expect(page.getByRole("heading", { name: /8月[3-7]日/ })).toBeVisible();
   const quickDate = page.getByLabel(/修改“每个工作日复盘（已编辑）”的日期/);
   await quickDate.fill("2026-08-10");
@@ -401,9 +408,9 @@ test("自定义重复任务和日历快速改期可用", async ({ page }) => {
 
 test("思维网图支持页面、圆点、连线、子网图和安全删除", async ({ page }) => {
   await page.getByRole("button", { name: /思维网图|网图/ }).click();
-  await page.getByRole("button", { name: "＋ 新建页面" }).click();
-  await page.getByLabel("页面名称").fill("自动化验收");
-  await page.getByRole("button", { name: "创建页面" }).click();
+  await page.getByRole("button", { name: "＋ 新建网图" }).click();
+  await page.getByLabel("网图名称").fill("自动化验收");
+  await page.getByRole("button", { name: "创建网图" }).click();
   await page.getByRole("button", { name: "目录", exact: true }).click();
   await page.getByRole("button", { name: "修改自动化验收的标题" }).click();
   await page.getByLabel("标题名称").fill("自动化验收已改名");
@@ -413,6 +420,7 @@ test("思维网图支持页面、圆点、连线、子网图和安全删除", as
   await page.getByLabel("完整想法").fill("这是一个用于验证自动标题截取和圆点详情的完整想法");
   await expect(page.getByLabel(/圆点关键词/)).toHaveValue("这是一个用于");
   await page.getByRole("button", { name: "生成圆点" }).click();
+  await selectGraphNode(page, "自动化验收已改名网图", "这是一个用于");
   await expect(page.getByRole("heading", { name: "这是一个用于" })).toBeVisible();
 
   const keywordInput = page.getByLabel(/圆点关键词/);
@@ -435,11 +443,24 @@ test("思维网图支持页面、圆点、连线、子网图和安全删除", as
   await expect(page.getByRole("button", { name: /查看图片备注1/ })).toBeVisible();
   await page.getByRole("button", { name: "删除图片备注2" }).click();
   await expect(page.getByRole("button", { name: /查看图片备注2/ })).toHaveCount(0);
+  if ((page.viewportSize()?.width || 0) <= 620) {
+    const inspector = page.getByRole("button", { name: "关闭想法详情" }).locator("xpath=ancestor::aside");
+    const inspectorBox = await inspector.boundingBox();
+    expect(inspectorBox).not.toBeNull();
+    expect(inspectorBox?.x || 0).toBeGreaterThanOrEqual(0);
+    expect((inspectorBox?.x || 0) + (inspectorBox?.width || 0)).toBeLessThanOrEqual(
+      page.viewportSize()?.width || 0,
+    );
+    await page.getByRole("button", { name: "关闭想法详情" }).click();
+  }
 
-  await page.getByRole("button", { name: "＋ 想法" }).click();
+  await page.getByRole("button", { name: "＋ 思维点" }).click();
   await page.getByPlaceholder("可以输入一句完整的话，画布上只显示精简关键词。").fill("第二个关联点");
   await page.getByRole("button", { name: "生成圆点" }).click();
-  await page.getByRole("button", { name: "关闭想法详情" }).click();
+  const closeIdeaDetail = page.getByRole("button", { name: "关闭想法详情" });
+  if (await closeIdeaDetail.isVisible().catch(() => false)) {
+    await closeIdeaDetail.click();
+  }
   await selectGraphNode(page, "自动化验收已改名网图", "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
   await expect(page.getByRole("button", { name: "连接其他点" })).toBeVisible();
   await page.getByRole("button", { name: "连接其他点" }).click();
@@ -450,7 +471,7 @@ test("思维网图支持页面、圆点、连线、子网图和安全删除", as
   await page.getByRole("button", { name: /为这个点建立子网图/ }).click();
   await expect(page.getByText("第 2 层网图", { exact: true })).toBeVisible();
   await page.locator("button:visible").filter({ hasText: "目录" }).first().click();
-  await expect(page.locator("h2:visible", { hasText: "想法笔记本" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "＋ 新建网图" })).toBeVisible();
 
   await page.locator('button[aria-label="删除自动化验收已改名"]:visible').click();
   await expect(page.locator('button:visible', { hasText: "永久删除" })).toBeDisabled();
@@ -461,7 +482,10 @@ test("思维网图支持页面、圆点、连线、子网图和安全删除", as
 
 test("项目重复导入会被识别为无变化", async ({ page }) => {
   await importProject(page, true);
-  await page.getByRole("button", { name: "关闭项目规划" }).click();
+  const closeProjectPlanning = page.getByRole("button", { name: "关闭项目规划" });
+  if (await closeProjectPlanning.isVisible().catch(() => false)) {
+    await closeProjectPlanning.click();
+  }
   await page.getByRole("button", { name: /导入项目/ }).first().click();
   await page.getByRole("button", { name: "导入项目 JSON" }).click();
   await page.getByRole("button", { name: "合并更新已有项目" }).click();

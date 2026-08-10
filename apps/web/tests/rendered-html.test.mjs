@@ -51,6 +51,7 @@ test("onboarding prompt interviews naturally before AI structures the tasks", as
   ]);
 
   assert.match(app, /后续建档采用自然问答方式/);
+  assert.match(app, /自然说明想做什么、目前情况和安排偏好，由 AI 帮你归纳成任务/);
   assert.match(app, /用户不需要自己决定任务怎么拆/);
   assert.match(app, /任务名、执行步骤、备注进行归纳/);
   assert.match(onboarding, /Use a natural conversation, not a field-by-field form/);
