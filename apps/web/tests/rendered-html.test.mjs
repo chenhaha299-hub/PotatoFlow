@@ -40,6 +40,25 @@ test("server-renders PotatoFlow without starter metadata", async () => {
   assert.doesNotMatch(html, /react-loading-skeleton/);
 });
 
+test("onboarding prompt interviews naturally before AI structures the tasks", async () => {
+  const [app, onboarding, skill] = await Promise.all([
+    readFile(new URL("../app/PotatoFlowApp.tsx", import.meta.url), "utf8"),
+    readFile(
+      new URL("../../../skills/potatoflow/references/onboarding.md", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../../../skills/potatoflow/SKILL.md", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(app, /后续建档采用自然问答方式/);
+  assert.match(app, /用户不需要自己决定任务怎么拆/);
+  assert.match(app, /任务名、执行步骤、备注进行归纳/);
+  assert.match(onboarding, /Use a natural conversation, not a field-by-field form/);
+  assert.match(onboarding, /the AI—not the user—maps the conversation into PotatoFlow/i);
+  assert.match(onboarding, /第二项太复杂/);
+  assert.match(skill, /fill PotatoFlow fields one by one/);
+});
+
 test("cloud sync API rejects anonymous access before touching user data", async () => {
   const response = await render("/api/sync", "application/json");
   assert.equal(response.status, 401);

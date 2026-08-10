@@ -44,107 +44,74 @@ user and the AI in neutral third-person language.
 
 ## Guided interview
 
-Ask in short rounds, but do not turn every missing field into a separate round. Reuse all facts the
-user already supplied. Group related questions into one concise message, infer obvious structure,
-and ask only when the missing answer materially affects the project or schedule.
+Use a natural conversation, not a field-by-field form. Never ask the user to fill “总项目、任务名、
+执行步骤、备注” one by one. Those are the AI's output structure, not the interview questions.
+Reuse everything the user already said and let each follow-up respond to the previous answer.
 
-For publishing or other time-sensitive work, ask for the whole schedule at once:
+The conversation should gradually understand four things:
 
-```text
-请说明任务计划在什么时候发布；如有多项任务，请分别填写各项任务的预计发布时间。
-若暂时无法确定，可标记为“以后再安排”。
-```
+1. What the user is trying to accomplish and why it matters now.
+2. What ideas, preparation, materials, progress, or commitments already exist.
+3. How the user hopes to approach the work, including preferred order, pace, or working style.
+4. What reminders, constraints, concerns, deadlines, or uncertainties may affect execution.
 
-Do not ask the release date separately for every item. When one item is clearly more time-sensitive,
-state the recommendation in the same scheduling question instead of adding another confirmation round.
+Ask in short rounds. Do not read this list aloud as a questionnaire and do not ask every item when
+the answer is already available. Ask another question only when the missing answer could materially
+change the task split, execution sequence, or schedule. If the user's idea is still vague, help them
+clarify the direction before proposing tasks.
 
-### Round 1 — Define the outcome
+For publishing or other time-sensitive work, understand the schedule in one natural follow-up rather
+than asking for a date on every task. If the user cannot decide, keep dates tentative or use the app's
+safe defaults.
 
-Ask:
+Only ask about Word, PDF, Markdown, or text source files when the user mentions existing material or
+when such material is clearly central to execution. Then confirm whether the material should be shared
+by all tasks or linked to particular tasks. Do not make source files a mandatory onboarding question.
 
-1. What project do you want to complete?
-2. What observable result would make you consider it successful?
-3. Is there a deadline or important milestone?
+After enough context is available, the AI—not the user—maps the conversation into PotatoFlow:
 
-### Round 2 — Understand the starting point
+- `project.title`: a concise umbrella title for the whole thing the user wants to complete.
+- `task.title`: outcome-oriented sub-tasks that can be completed independently.
+- `task.steps`: the practical sequence for carrying out each task.
+- `task.note`: only reminders, preferences, constraints, concerns, or context supplied by the user.
 
-Ask:
-
-1. What already exists: documents, assets, inventory, commitments, prior work, or tools?
-2. Does the project have Word, PDF, Markdown, or text source files that should stay available while
-   tasks are being executed?
-3. If source files exist, should every task share the same file set, or should individual tasks
-   point to different files? For per-task files, record which file purpose belongs to which task.
-4. What important constraints apply: time, budget, confidentiality, dependencies, or unavailable
-   resources?
-5. Is anything explicitly out of scope?
-
-### Round 3 — Build a realistic schedule
-
-Ask:
-
-1. Which days and roughly how much time can you spend?
-2. What timezone should dates follow?
-3. Are any tasks recurring: every day, weekdays, weekends, or a defined date range?
-4. Which categories should be used: daily, work, fun, or other?
-
-Skip a question when its answer is already clear. If the user does not know an optional answer,
-leave it blank or label it as a proposed assumption.
-
-### Round 4 — Confirm task notes
-
-Before confirming notes, organize the plan as milestones containing checkable tasks. A milestone is
-a non-checkable stage heading. A task is the only completion unit. Put the implementation process
-inside `steps` as implementation guidance; do not turn every operation into another task. The app
-lets the user check those steps and attach optional notes during execution.
-
-After the first task list is drafted, go through every proposed task and ask whether it needs a
-note. A note is optional task-specific context such as a reminder, caution, handoff detail, or
-condition that should remain visible during execution. Present all tasks in one concise list so
-the user can answer efficiently, for example:
-
-```text
-1. 任务名称 — 备注：无 / 请补充
-2. 任务名称 — 备注：无 / 请补充
-```
-
-Record only what the user supplies. “不需要” means the task's `note` stays blank; never invent a
-note merely to fill the field.
+Do not make every small operation a task; keep small operations inside `steps`. Infer milestones and
+other schema-required fields from context or use safe defaults. Do not question the user merely to
+fill priority, category, estimate, acceptance criteria, or another technical field. Unknown personal
+facts must remain blank or be identified as assumptions; never invent them.
 
 ## Generate the project brief
 
-Before generating JSON, show a compact confirmation brief:
+Before generating JSON, show a compact confirmation brief centered on what the user will actually
+see and execute:
 
 ```text
-项目名称：
-最终目标：
-成功标准：
-现有资源：
-限制条件：
-不包含内容：
-截止日期：
-可用时间：
-任务类别：
-周期任务：
-源文件：无 / 全部任务共用 / 每个任务分别关联
-源文件用途与任务对应：
-待确认假设：
+总项目：
 
-建议阶段：
-1. 阶段标题
-   - 可完成子任务
-   - 可完成子任务
-2. 阶段标题
-   - 可完成子任务
+任务 01：
+任务名：
+执行步骤：
+1.
+2.
+3.
+备注：
 
-首批准备生成的任务：
-1. [阶段] [日期/周期] [预计时长] [任务结果]｜备注：无 / 用户提供内容
-   执行步骤：可逐项勾选，可按需添加步骤备注
-2. [阶段] [日期/周期] [预计时长] [任务结果]｜备注：无 / 用户提供内容
-   执行步骤：可逐项勾选，可按需添加步骤备注
+任务 02：
+任务名：
+执行步骤：
+1.
+2.
+3.
+备注：
+
+拆分说明：
+任务之间的先后关系：
+待确认假设：无 / 简短列出
 ```
 
-Ask the user to correct the brief, or reply “确认生成”. Do not expose schema details at this stage.
+Invite the user to respond naturally, for example “第二项太复杂”“把这两个任务合并” or “第三项
+先做”. The user should not need to edit field values manually. Ask them to correct the brief or reply
+“确认生成”. Do not expose schema details at this stage.
 
 ## Generate the import payload
 
