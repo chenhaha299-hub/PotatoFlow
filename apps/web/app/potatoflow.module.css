@@ -8305,3 +8305,405 @@
     opacity: 1;
   }
 }
+
+/* 2026-08 visual hierarchy calibration
+   A compact global layer keeps every workspace consistent without changing behavior. */
+.shell {
+  --ui-caption: 12px;
+  --ui-label: 13px;
+  --ui-body: 14px;
+  --ui-title-sm: 18px;
+  --ui-title-md: 22px;
+  --ui-title-lg: clamp(34px, 3.4vw, 44px);
+}
+
+.shell h2,
+.shell h3 {
+  font-weight: 720;
+}
+
+.main {
+  padding-top: 30px;
+}
+
+.topbar {
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.topbar h1 {
+  font-size: var(--ui-title-lg);
+  font-weight: 760;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+}
+
+.eyebrow {
+  font-size: var(--ui-caption);
+  font-weight: 780;
+  letter-spacing: 0.1em;
+}
+
+.brand strong,
+.nav .navActive,
+.primaryButton,
+.quietButton,
+.topActions button {
+  font-weight: 720;
+}
+
+.brand small,
+.sidebarNote p,
+.sidebarNote small,
+.nav button,
+.dateStrip span,
+.projectCard > p,
+.issueList small {
+  font-size: var(--ui-body);
+  line-height: 1.55;
+}
+
+.pageGrid,
+.projectGrid,
+.issueList,
+.logicSummaryList {
+  gap: 16px;
+}
+
+.dateStrip,
+.taskGroup,
+.calendarPanel,
+.pendingScheduleBoard,
+.projectCard,
+.issueList button,
+.contextPanel,
+.logicGraphPrototype,
+.memoStudioGrid {
+  border-color: var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.taskGroup,
+.projectCard,
+.issueList button,
+.calendarPanel,
+.pendingScheduleBoard {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.taskGroupHeader,
+.taskProjectGroupHeader,
+.taskMilestoneHeader {
+  min-height: 48px;
+}
+
+.taskGroupHeader {
+  padding: 12px 16px;
+}
+
+.taskGroupHeader h2,
+.taskMilestoneHeader strong {
+  font-size: var(--ui-body);
+  font-weight: 720;
+}
+
+.taskGroupHeader small,
+.taskMilestoneHeader span,
+.taskMilestoneHeader small,
+.taskProjectGroupHeader span,
+.taskProjectGroupHeader button {
+  font-size: var(--ui-caption);
+  font-weight: 720;
+}
+
+.taskCard {
+  min-height: 56px;
+  padding: 12px 16px;
+}
+
+.calendarHeader,
+.pendingScheduleHeader {
+  padding: 20px 22px;
+}
+
+.calendarHeader h2,
+.pendingScheduleHeader h2 {
+  font-size: var(--ui-title-md);
+  font-weight: 740;
+  letter-spacing: -0.025em;
+}
+
+.projectCard {
+  padding: 20px;
+}
+
+.projectCard h2 {
+  margin: 18px 0 7px;
+  font-size: var(--ui-title-md);
+  font-weight: 740;
+  letter-spacing: -0.025em;
+}
+
+.projectStats {
+  margin-top: 14px;
+}
+
+.projectStats span,
+.projectTasks small,
+.issueList button > span {
+  font-size: var(--ui-caption);
+}
+
+.drawer,
+.planDrawer,
+.taskDetailDrawer {
+  color: var(--ink);
+}
+
+.planDrawer,
+.taskDetailDrawer {
+  border-radius: var(--radius-lg);
+}
+
+.projectPlanHeading h2,
+.drawer > h2,
+.detailTaskTitle h2 {
+  font-size: clamp(28px, 3vw, 36px);
+  font-weight: 760;
+  letter-spacing: -0.035em;
+  line-height: 1.16;
+}
+
+.projectEditor,
+.projectCategoryPanel,
+.projectTaskPlanner,
+.taskDefinitionEditor {
+  gap: 16px;
+  border-color: var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-soft);
+  padding: 18px;
+}
+
+.projectEditorGroup,
+.projectMilestoneGroup,
+.planBlock {
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.projectEditorHeader h3,
+.projectTaskPlannerHeader h3,
+.taskDefinitionEditorHeading h3 {
+  font-size: var(--ui-title-sm);
+  font-weight: 740;
+  letter-spacing: -0.015em;
+}
+
+.projectEditorGroupHeading strong,
+.projectEditorGroup label > span,
+.customTaskForm label > span,
+.stepEditorHeader strong {
+  font-weight: 720;
+}
+
+.projectEditorGroupHeading small,
+.fieldHelp,
+.stepEditorHeader small,
+.stepEditorEmpty,
+.taskDefinitionEditorHeading > span {
+  color: var(--muted);
+  font-size: var(--ui-caption);
+  line-height: 1.5;
+}
+
+.taskProgressPanel,
+.taskControls,
+.taskSourceFilesPanel,
+.taskReportPanel,
+.issueComposer {
+  gap: 12px;
+  margin-bottom: 14px;
+  border-radius: var(--radius-md);
+  background: #fff;
+  padding: 16px;
+  box-shadow: var(--shadow-sm);
+}
+
+.taskProgressPanel {
+  background: color-mix(in srgb, var(--task-soft, #f4f7f2) 38%, white);
+}
+
+.taskControls {
+  background: #f8fbfe;
+}
+
+.taskSourceFilesPanel {
+  background: #fcfaff;
+}
+
+.taskReportPanel {
+  background: #f8fcfb;
+}
+
+.issueComposer {
+  background: #fffaf8;
+}
+
+.taskSourceFilesPanel h3,
+.taskReportPanel h3,
+.issueComposer h3,
+.taskProgressHeader strong {
+  font-size: var(--ui-body);
+  font-weight: 740;
+}
+
+.taskSectionNav {
+  gap: 5px;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.taskSectionNav button,
+.detailMeta span,
+.taskNoteField small,
+.taskReportPanel p:not(.eyebrow) {
+  font-size: var(--ui-caption);
+}
+
+.memoStudioHeader,
+.logicNotebookHeader,
+.logicSummaryHeader {
+  padding-top: 22px;
+  padding-bottom: 18px;
+}
+
+.memoStudioHeader h2,
+.logicNotebookHeader h2,
+.logicSummaryHeader h2 {
+  font-size: clamp(30px, 3.2vw, 40px);
+  font-weight: 760;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
+}
+
+.memoStudioDirectory,
+.memoStudioEditor,
+.memoStudioInspector {
+  padding: 18px;
+}
+
+.memoStudioDirectory > strong,
+.memoStudioChecklist h4,
+.logicChecklistCard h4 {
+  font-size: var(--ui-title-sm);
+  font-weight: 740;
+}
+
+.memoStudioEditor > header h3,
+.memoStudioInspector > header h3,
+.logicChecklistWorkspaceHeader h3 {
+  font-size: var(--ui-title-md);
+  font-weight: 740;
+  letter-spacing: -0.025em;
+}
+
+.memoStudioThoughts,
+.memoStudioPages,
+.logicChecklistGrid {
+  gap: 10px;
+}
+
+.memoStudioThoughts > button,
+.memoStudioPages .memoStudioPageRow,
+.memoStudioStatus,
+.memoStudioAttachments,
+.memoStudioCalendarTask,
+.logicThoughtMeta,
+.logicChecklistCard {
+  border-radius: var(--radius-md);
+}
+
+.memoStudioPages > .memoStudioPageRow > .memoStudioPageMain small,
+.memoStudioThoughts button em,
+.memoStudioCalendarTaskHeading small,
+.memoStudioCalendarTaskLinked small,
+.memoStudioChild small,
+.logicGraphToolbar small,
+.logicPageSwitcher > span {
+  font-size: var(--ui-caption);
+}
+
+.logicGraphToolbar {
+  padding: 12px 16px;
+}
+
+.logicGraphToolbar strong {
+  font-size: 16px;
+  font-weight: 740;
+}
+
+.logicChecklistWorkspace {
+  padding: 20px;
+}
+
+.logicSummaryStats article,
+.logicSummaryRow,
+.logicChecklistCard {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.logicSummaryMain h3 {
+  font-size: var(--ui-title-sm);
+  font-weight: 740;
+}
+
+@media (max-width: 720px) {
+  .main {
+    padding-top: 18px;
+  }
+
+  .topbar {
+    margin-bottom: 18px;
+  }
+
+  .topbar h1 {
+    font-size: 32px;
+  }
+
+  .pageGrid,
+  .projectGrid,
+  .issueList,
+  .logicSummaryList {
+    gap: 12px;
+  }
+
+  .projectCard,
+  .calendarHeader,
+  .pendingScheduleHeader,
+  .projectEditor,
+  .projectCategoryPanel,
+  .projectTaskPlanner,
+  .taskDefinitionEditor,
+  .taskProgressPanel,
+  .taskControls,
+  .taskSourceFilesPanel,
+  .taskReportPanel,
+  .issueComposer {
+    padding: 14px;
+  }
+
+  .projectPlanHeading h2,
+  .drawer > h2,
+  .detailTaskTitle h2 {
+    font-size: 27px;
+  }
+
+  .memoStudioHeader h2,
+  .logicNotebookHeader h2,
+  .logicSummaryHeader h2 {
+    font-size: 30px;
+  }
+}

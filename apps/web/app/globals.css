@@ -1,16 +1,23 @@
 @import "tailwindcss";
 
 :root {
-  --ink: #1d211d;
-  --muted: #6c736c;
-  --line: #e4e7df;
+  --ink: #182019;
+  --muted: #687269;
+  --muted-soft: #8b948c;
+  --line: #dfe5dd;
+  --line-strong: #ccd7ce;
   --paper: #f7f8f3;
   --panel: #ffffff;
+  --surface-soft: #f3f6f1;
   --green: #1f6a49;
   --green-soft: #e3f0e8;
   --lime: #dff35c;
   --orange: #f2a55f;
-  --shadow: 0 18px 60px rgba(35, 48, 38, 0.08);
+  --shadow-sm: 0 6px 18px rgba(31, 46, 35, 0.05);
+  --shadow: 0 14px 42px rgba(31, 46, 35, 0.07);
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
 }
 
 * {
@@ -31,8 +38,13 @@ body {
     radial-gradient(circle at 86% 8%, rgba(223, 243, 92, 0.2), transparent 24rem),
     var(--paper);
   color: var(--ink);
+  font-size: 15px;
   font-family:
     Inter, "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  font-weight: 400;
+  line-height: 1.55;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 @media (max-width: 620px) {
@@ -45,7 +57,8 @@ body {
 
 button,
 textarea,
-input {
+input,
+select {
   font: inherit;
 }
 
