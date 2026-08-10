@@ -339,6 +339,7 @@ const STORAGE_KEY = "potatoflow:v1";
 const STORAGE_BACKUP_KEY = "potatoflow:v1:backup";
 const LOCAL_UPDATED_AT_KEY = "potatoflow:v1:updated-at";
 const IMPORT_SNAPSHOTS_KEY = "potatoflow:v1:import-snapshots";
+const LOCAL_BACKUP_MAX_CHARS = 1_500_000;
 const FILE_DB_NAME = "potatoflow-files";
 const FILE_STORE_NAME = "source-files";
 const EMPTY_STORE: Store = {
@@ -485,13 +486,41 @@ function readStoredData() {
   return null;
 }
 
-function writeStoredData(value: Store) {
-  const serialized = JSON.stringify(value);
-  const previous = localStorage.getItem(STORAGE_KEY);
-  if (previous === serialized) return;
-  if (previous) localStorage.setItem(STORAGE_BACKUP_KEY, previous);
-  localStorage.setItem(STORAGE_KEY, serialized);
-  localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+type LocalWriteResult = "saved" | "unchanged" | "quota" | "error";
+
+function isStorageQuotaError(error: unknown) {
+  return (
+    error instanceof DOMException &&
+    (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED")
+  );
+}
+
+function writeStoredData(value: Store): LocalWriteResult {
+  try {
+    const serialized = JSON.stringify(value);
+    const previous = localStorage.getItem(STORAGE_KEY);
+    if (previous === serialized) return "unchanged";
+    if (previous && previous.length <= LOCAL_BACKUP_MAX_CHARS) {
+      localStorage.setItem(STORAGE_BACKUP_KEY, previous);
+    } else {
+      localStorage.removeItem(STORAGE_BACKUP_KEY);
+    }
+    localStorage.setItem(STORAGE_KEY, serialized);
+    localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+    return "saved";
+  } catch (error) {
+    if (!isStorageQuotaError(error)) return "error";
+    try {
+      // Prefer the current data over an older duplicate when storage is tight.
+      const serialized = JSON.stringify(value);
+      localStorage.removeItem(STORAGE_BACKUP_KEY);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+      return "saved";
+    } catch (retryError) {
+      return isStorageQuotaError(retryError) ? "quota" : "error";
+    }
+  }
 }
 
 function storeLatestTimestamp(value: Store) {
@@ -1477,6 +1506,7 @@ export default function PotatoFlowApp({
     syncEnabled ? "checking" : "local",
   );
   const [syncError, setSyncError] = useState("");
+  const [storageError, setStorageError] = useState("");
   const [syncChoice, setSyncChoice] = useState<SyncChoice | null>(null);
   const [selectedSyncCopy, setSelectedSyncCopy] = useState<"local" | "cloud" | null>(null);
   const [cloudRevision, setCloudRevision] = useState(0);
@@ -1484,6 +1514,8 @@ export default function PotatoFlowApp({
   const syncReadyRef = useRef(false);
   const lastCloudPayloadRef = useRef("");
   const syncRequestRef = useRef(false);
+  const latestStoreRef = useRef(store);
+  latestStoreRef.current = store;
 
   useEffect(() => {
     const stored = readStoredData();
@@ -1493,10 +1525,28 @@ export default function PotatoFlowApp({
   }, []);
 
   useEffect(() => {
-    if (hydrated) {
-      writeStoredData(store);
-    }
+    if (!hydrated) return;
+    const timer = window.setTimeout(() => {
+      const result = writeStoredData(store);
+      setStorageError(
+        result === "quota"
+          ? "本机存储空间不足，最新修改暂时无法保存。请先导出备份或清理浏览器空间。"
+          : result === "error"
+            ? "本机保存出现问题，请先导出备份后刷新重试。"
+            : "",
+      );
+    }, 400);
+    return () => window.clearTimeout(timer);
   }, [store, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const flushLatestStore = () => {
+      writeStoredData(latestStoreRef.current);
+    };
+    window.addEventListener("pagehide", flushLatestStore);
+    return () => window.removeEventListener("pagehide", flushLatestStore);
+  }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated || !syncEnabled) return;
@@ -1594,10 +1644,9 @@ export default function PotatoFlowApp({
     ) {
       return;
     }
-    const payload = serializedStore(store);
-    if (payload === lastCloudPayloadRef.current) return;
-
     const timer = window.setTimeout(async () => {
+      const payload = serializedStore(store);
+      if (payload === lastCloudPayloadRef.current) return;
       syncRequestRef.current = true;
       setSyncStatus("saving");
       try {
@@ -4572,6 +4621,12 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             </div>
           ) : null}
         </header>
+
+        {storageError && (
+          <p className={styles.syncError} role="alert">
+            {storageError}
+          </p>
+        )}
 
 
         {activeTab === "today" && (

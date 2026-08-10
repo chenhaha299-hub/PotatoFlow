@@ -261,6 +261,10 @@ export default function LogicGraphPrototype({
   } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const pagesRef = useRef(pages);
+  const pageViewportsRef = useRef(pageViewports);
+  pagesRef.current = pages;
+  pageViewportsRef.current = pageViewports;
   const pointerMap = useRef(new Map<number, { x: number; y: number }>());
   const panState = useRef<
     | { pointerId: number; startX: number; startY: number; origin: Viewport }
@@ -356,6 +360,10 @@ export default function LogicGraphPrototype({
     }),
     [mode, pages],
   );
+  const requestedGraphPageAvailable = useMemo(
+    () => Boolean(openPageId && pages.some((page) => page.id === openPageId && page.level === 1)),
+    [openPageId, pages],
+  );
 
   useEffect(() => {
     setPages((current) => {
@@ -379,16 +387,18 @@ export default function LogicGraphPrototype({
   }, [activePageId, mode, topLevelPages]);
 
   useEffect(() => {
-    if (mode !== "graph" || !openPageId) return;
-    const page = pages.find((item) => item.id === openPageId && item.level === 1);
+    if (mode !== "graph" || !openPageId || !requestedGraphPageAvailable) return;
+    const page = pagesRef.current.find(
+      (item) => item.id === openPageId && item.level === 1,
+    );
     if (!page) return;
     setActivePageId(page.id);
     setSelectedNodeId(page.sourceRootNodeId || null);
     setSelectedEdgeId(null);
     setConnectSourceId(null);
     setContentView("graph");
-    setViewport(pageViewports[page.id] || { x: 40, y: 25, scale: 0.82 });
-  }, [mode, openPageId]);
+    setViewport(pageViewportsRef.current[page.id] || { x: 40, y: 25, scale: 0.82 });
+  }, [mode, openPageId, requestedGraphPageAvailable]);
 
   const memoChildPages = useMemo(
     () => {

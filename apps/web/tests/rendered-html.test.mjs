@@ -89,6 +89,39 @@ test("source files use account-scoped cloud storage", async () => {
   assert.match(route, /"jpeg"/);
   assert.match(route, /"png"/);
   assert.match(route, /"webp"/);
+  assert.match(route, /hasExpectedSignature/);
+  assert.match(route, /X-Content-Type-Options/);
+  assert.match(route, /Cross-Origin-Resource-Policy/);
+  assert.match(route, /customMetadata: \{ filename, extension \}/);
+  assert.doesNotMatch(route, /contentType: request\.headers\.get\("content-type"\)/);
+});
+
+test("local persistence is delayed and reports storage failures", async () => {
+  const app = await readFile(
+    new URL("../app/PotatoFlowApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /isStorageQuotaError/);
+  assert.match(app, /LOCAL_BACKUP_MAX_CHARS/);
+  assert.match(app, /const \[storageError, setStorageError\]/);
+  assert.match(app, /window\.setTimeout\(\(\) => \{\s*const result = writeStoredData\(store\)/);
+  assert.match(app, /window\.addEventListener\("pagehide", flushLatestStore\)/);
+});
+
+test("standalone acceptance scripts fail when interrupted or incomplete", async () => {
+  const scripts = await Promise.all(
+    [
+      "acceptance-extended.mjs",
+      "acceptance-deep.mjs",
+      "acceptance-final.mjs",
+      "acceptance-memo-graph.mjs",
+    ].map((name) => readFile(new URL(`../e2e/${name}`, import.meta.url), "utf8")),
+  );
+  for (const script of scripts) {
+    assert.match(script, /let interrupted = false/);
+    assert.match(script, /interrupted = true/);
+    assert.match(script, /if \(interrupted \|\| passed !== results\.length\) process\.exitCode = 1/);
+  }
 });
 
 test("source keeps the app empty and local-first", async () => {

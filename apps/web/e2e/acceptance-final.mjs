@@ -7,6 +7,7 @@ const FIX = path.join(__dirname, "fixtures");
 
 const BASE = "http://127.0.0.1:3001";
 const results = [];
+let interrupted = false;
 function record(name, pass, detail = "") {
   results.push({ name, pass, detail });
   console.log(`${pass ? "✅" : "❌"} ${name}${detail ? " — " + detail : ""}`);
@@ -151,10 +152,12 @@ try {
   record("7 删备忘录附件后网图附件保留", /test-note/.test(gAfter));
   await page.screenshot({ path: "G:\\AI\\Hermes\\work\\fin-attachment-kept.png" });
 } catch (e) {
+  interrupted = true;
   console.log("!!! 终验收中断:", e.message.slice(0, 250));
 }
 
 console.log("\n════════ 终验收汇总 ════════");
 const passed = results.filter((r) => r.pass).length;
 console.log(`${passed}/${results.length} 项通过`);
+if (interrupted || passed !== results.length) process.exitCode = 1;
 await browser.close();

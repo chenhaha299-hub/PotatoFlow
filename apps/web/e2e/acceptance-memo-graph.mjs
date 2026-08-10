@@ -3,6 +3,7 @@ import { chromium } from "@playwright/test";
 
 const BASE = "http://127.0.0.1:3001";
 const results = [];
+let interrupted = false;
 function record(name, pass, detail = "") {
   results.push({ name, pass, detail });
   console.log(`${pass ? "✅" : "❌"} ${name}${detail ? " — " + detail : ""}`);
@@ -129,11 +130,13 @@ try {
   const extra = ["思维点A1", "思维点A2", "思维点B1", "思维点B2"].filter((t) => g2.includes(t));
   record("网图目录不泄漏单个想法", extra.length === 0, extra.length ? "意外:" + extra.join(",") : "干净");
 } catch (e) {
+  interrupted = true;
   console.log("!!! 脚本异常中断:", e.message.slice(0, 300));
 }
 
 console.log("\n════════ 验收汇总 ════════");
 const passed = results.filter((r) => r.pass).length;
 console.log(`${passed}/${results.length} 项通过`);
+if (interrupted || passed !== results.length) process.exitCode = 1;
 if (stepInfo.length) console.log("步骤日志:", stepInfo.join(" | "));
 await browser.close();

@@ -8,6 +8,7 @@ const FIX = path.join(__dirname, "fixtures");
 
 const BASE = "http://127.0.0.1:3001";
 const results = [];
+let interrupted = false;
 function record(name, pass, detail = "") {
   results.push({ name, pass, detail });
   console.log(`${pass ? "✅" : "❌"} ${name}${detail ? " — " + detail : ""}`);
@@ -178,10 +179,12 @@ try {
   record("6 网图附件仍独立存在", /test-note/.test(graphAfter));
   await shot("6-graph-attachment-kept");
 } catch (e) {
+  interrupted = true;
   console.log("!!! 深度验收中断:", e.message.slice(0, 250));
 }
 
 console.log("\n════════ 深度验收汇总 ════════");
 const passed = results.filter((r) => r.pass).length;
 console.log(`${passed}/${results.length} 项通过`);
+if (interrupted || passed !== results.length) process.exitCode = 1;
 await browser.close();
