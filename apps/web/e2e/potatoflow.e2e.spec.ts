@@ -162,6 +162,21 @@ test("空白状态、导航和响应式布局可用", async ({ page }) => {
   await expectNoHorizontalOverflow(page);
 });
 
+test("数据与隐私入口在桌面和手机均可使用", async ({ page }) => {
+  await page.getByRole("button", { name: "数据与隐私", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "数据与隐私", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("本机数据", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "导出完整备份" })).toBeVisible();
+  await expect(page.getByText(/当前没有启用账户同步/)).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "完成", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "数据与隐私", exact: true }),
+  ).toHaveCount(0);
+});
+
 test("整篇备忘录可生成网图，思维点也可添加到日历", async ({ page }) => {
   await navigateTo(page, "备忘录");
   await expect(page.getByRole("heading", { name: "备忘录", exact: true }).filter({ visible: true })).toHaveCount(1);

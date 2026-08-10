@@ -8,98 +8,25 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  type GraphPage,
+  type IdeaEdge,
+  type IdeaImageNote,
+  type IdeaNode,
+  type IdeaSourceFile,
+  type IdeaStatus,
+} from "./logic-graph-model";
+import {
+  readSourceFileBlob,
+  readSourceFileFromCloud,
+  removeSourceFileBlob,
+  removeSourceFileFromCloud,
+  saveSourceFileBlob,
+  uploadSourceFileToCloud,
+} from "./source-file-storage";
 import styles from "./potatoflow.module.css";
 
-export type IdeaStatus = "red" | "orange" | "green" | "black";
-
-export type IdeaChecklist = {
-  id: string;
-  title: string;
-};
-
-export type IdeaNode = {
-  id: string;
-  label: string;
-  content: string;
-  x: number;
-  y: number;
-  childPageId?: string;
-  memoChildPageId?: string;
-  sourceFiles?: IdeaSourceFile[];
-  imageNotes?: IdeaImageNote[];
-  supplementaryPoints?: IdeaSupplementaryPoint[];
-  status?: IdeaStatus;
-  checklistId?: string;
-  generatedGraphPageId?: string;
-  calendarTaskId?: string;
-  fresh?: boolean;
-};
-
-export type IdeaSupplementaryPoint = {
-  id: string;
-  text: string;
-};
-
-export type IdeaSourceFile = {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  uploadedAt: string;
-};
-
-export type IdeaImageNote = IdeaSourceFile;
-
-export type IdeaEdge = {
-  id: string;
-  source: string;
-  target: string;
-  label?: string;
-  directed?: boolean;
-  fresh?: boolean;
-};
-
-export type GraphPage = {
-  id: string;
-  title: string;
-  level: 1 | 2 | 3;
-  parentPageId?: string;
-  parentNodeId?: string;
-  nodes: IdeaNode[];
-  edges: IdeaEdge[];
-  checklists?: IdeaChecklist[];
-  workspace?: "memo" | "graph";
-  sourceMemoPageId?: string;
-  sourceMemoNodeId?: string;
-  memoGraphPageId?: string;
-  sourceRootNodeId?: string;
-  updatedLabel: string;
-};
-
 type Viewport = { x: number; y: number; scale: number };
-
-export const INITIAL_LOGIC_GRAPH_PAGES: GraphPage[] = [
-  {
-    id: "inbox",
-    title: "灵感收集",
-    level: 1,
-    workspace: "graph",
-    nodes: [],
-    edges: [],
-    checklists: [{ id: "inbox-default", title: "灵感清单" }],
-    updatedLabel: "等待第一个想法",
-  },
-  {
-    id: "memo-inbox",
-    title: "灵感收集",
-    level: 1,
-    workspace: "memo",
-    nodes: [],
-    edges: [],
-    checklists: [{ id: "memo-inbox-default", title: "灵感清单" }],
-    updatedLabel: "等待第一个想法",
-  },
-];
 
 function compactLabel(value: string) {
   const compact = value.replace(/[\s，。！？、；：,.!?;:]/g, "");
@@ -116,79 +43,6 @@ function formatFileSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const GRAPH_FILE_DB_NAME = "potatoflow-files";
-const GRAPH_FILE_STORE_NAME = "source-files";
-
-function openGraphFileDatabase() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(GRAPH_FILE_DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(GRAPH_FILE_STORE_NAME)) {
-        request.result.createObjectStore(GRAPH_FILE_STORE_NAME);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function saveGraphFile(id: string, file: File) {
-  const database = await openGraphFileDatabase();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(GRAPH_FILE_STORE_NAME, "readwrite");
-    transaction.objectStore(GRAPH_FILE_STORE_NAME).put(file, id);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  database.close();
-}
-
-async function readGraphFile(id: string) {
-  const database = await openGraphFileDatabase();
-  const file = await new Promise<Blob | undefined>((resolve, reject) => {
-    const transaction = database.transaction(GRAPH_FILE_STORE_NAME, "readonly");
-    const request = transaction.objectStore(GRAPH_FILE_STORE_NAME).get(id);
-    request.onsuccess = () => resolve(request.result as Blob | undefined);
-    request.onerror = () => reject(request.error);
-  });
-  database.close();
-  return file;
-}
-
-async function removeGraphFile(id: string) {
-  const database = await openGraphFileDatabase();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(GRAPH_FILE_STORE_NAME, "readwrite");
-    transaction.objectStore(GRAPH_FILE_STORE_NAME).delete(id);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  database.close();
-}
-
-async function uploadGraphFileToCloud(id: string, file: File) {
-  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type || "application/octet-stream",
-      "X-File-Name": encodeURIComponent(file.name),
-    },
-    body: file,
-  });
-  if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || "文件暂时无法上传到云端。");
-  }
-}
-
-async function readGraphFileFromCloud(id: string) {
-  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, { cache: "no-store" });
-  return response.ok ? response.blob() : undefined;
-}
-
-async function removeGraphFileFromCloud(id: string) {
-  await fetch(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
 
 type LogicGraphProps = {
   pages: GraphPage[];
@@ -327,11 +181,11 @@ export default function LogicGraphPrototype({
       }
       const entries = await Promise.all(
         images.map(async (image) => {
-          let blob = await readGraphFile(image.id);
+          let blob = await readSourceFileBlob(image.id);
           if (!blob && syncEnabled) {
-            blob = await readGraphFileFromCloud(image.id);
+            blob = await readSourceFileFromCloud(image.id);
             if (blob) {
-              await saveGraphFile(image.id, new File([blob], image.name, { type: blob.type }));
+              await saveSourceFileBlob(image.id, new File([blob], image.name, { type: blob.type }));
             }
           }
           if (!blob) return null;
@@ -621,8 +475,8 @@ export default function LogicGraphPrototype({
     }
     await Promise.allSettled(
       fileIds.flatMap((id) => [
-        removeGraphFile(id),
-        ...(syncEnabled ? [removeGraphFileFromCloud(id)] : []),
+        removeSourceFileBlob(id),
+        ...(syncEnabled ? [removeSourceFileFromCloud(id)] : []),
       ]),
     );
   }
@@ -673,13 +527,13 @@ export default function LogicGraphPrototype({
 
     const cloneAttachments = async (files: IdeaSourceFile[] | undefined, prefix: string) => {
       const copies = await Promise.all((files || []).map(async (metadata) => {
-        let blob = await readGraphFile(metadata.id);
-        if (!blob && syncEnabled) blob = await readGraphFileFromCloud(metadata.id);
+        let blob = await readSourceFileBlob(metadata.id);
+        if (!blob && syncEnabled) blob = await readSourceFileFromCloud(metadata.id);
         if (!blob) return null;
         const id = uid(prefix);
         const file = new File([blob], metadata.name, { type: blob.type || metadata.type });
-        await saveGraphFile(id, file);
-        if (syncEnabled) await uploadGraphFileToCloud(id, file);
+        await saveSourceFileBlob(id, file);
+        if (syncEnabled) await uploadSourceFileToCloud(id, file);
         return { ...metadata, id, uploadedAt: new Date().toISOString() };
       }));
       return copies.filter((file): file is IdeaSourceFile => Boolean(file));
@@ -988,8 +842,8 @@ export default function LogicGraphPrototype({
     setConnectSourceId(null);
     await Promise.allSettled(
       fileIds.flatMap((id) => [
-        removeGraphFile(id),
-        ...(syncEnabled ? [removeGraphFileFromCloud(id)] : []),
+        removeSourceFileBlob(id),
+        ...(syncEnabled ? [removeSourceFileFromCloud(id)] : []),
       ]),
     );
   }
@@ -1026,8 +880,8 @@ export default function LogicGraphPrototype({
           size: file.size,
           uploadedAt: new Date().toISOString(),
         };
-        await saveGraphFile(metadata.id, file);
-        if (syncEnabled) await uploadGraphFileToCloud(metadata.id, file);
+        await saveSourceFileBlob(metadata.id, file);
+        if (syncEnabled) await uploadSourceFileToCloud(metadata.id, file);
         additions.push(metadata);
       }
       updateSelectedNode({ sourceFiles: [...(selectedNode?.sourceFiles || []), ...additions] });
@@ -1042,11 +896,11 @@ export default function LogicGraphPrototype({
     setFileError("");
     try {
       setFileBusy(true);
-      let blob = await readGraphFile(file.id);
+      let blob = await readSourceFileBlob(file.id);
       if (!blob && syncEnabled) {
-        blob = await readGraphFileFromCloud(file.id);
+        blob = await readSourceFileFromCloud(file.id);
         if (blob) {
-          await saveGraphFile(file.id, new File([blob], file.name, { type: blob.type }));
+          await saveSourceFileBlob(file.id, new File([blob], file.name, { type: blob.type }));
         }
       }
       if (!blob) throw new Error("没有找到文件内容，可能尚未同步到当前设备。");
@@ -1066,8 +920,8 @@ export default function LogicGraphPrototype({
       sourceFiles: (selectedNode?.sourceFiles || []).filter((file) => file.id !== fileId),
     });
     await Promise.allSettled([
-      removeGraphFile(fileId),
-      ...(syncEnabled ? [removeGraphFileFromCloud(fileId)] : []),
+      removeSourceFileBlob(fileId),
+      ...(syncEnabled ? [removeSourceFileFromCloud(fileId)] : []),
     ]);
   }
 
@@ -1109,8 +963,8 @@ export default function LogicGraphPrototype({
           size: file.size,
           uploadedAt: new Date().toISOString(),
         };
-        await saveGraphFile(metadata.id, file);
-        if (syncEnabled) await uploadGraphFileToCloud(metadata.id, file);
+        await saveSourceFileBlob(metadata.id, file);
+        if (syncEnabled) await uploadSourceFileToCloud(metadata.id, file);
         additions.push(metadata);
       }
       updateSelectedNode({ imageNotes: [...(selectedNode?.imageNotes || []), ...additions] });
@@ -1127,8 +981,8 @@ export default function LogicGraphPrototype({
       imageNotes: (selectedNode?.imageNotes || []).filter((image) => image.id !== imageId),
     });
     await Promise.allSettled([
-      removeGraphFile(imageId),
-      ...(syncEnabled ? [removeGraphFileFromCloud(imageId)] : []),
+      removeSourceFileBlob(imageId),
+      ...(syncEnabled ? [removeSourceFileFromCloud(imageId)] : []),
     ]);
   }
 

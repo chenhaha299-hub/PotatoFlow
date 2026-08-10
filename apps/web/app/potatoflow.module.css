@@ -196,6 +196,18 @@
   white-space: nowrap;
 }
 
+.topbarUtilities {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.privacyButton {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
 .primaryButton,
 .quietButton {
   display: inline-flex;
@@ -2591,6 +2603,86 @@
 .exportTargets {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-bottom: 12px;
+}
+
+.privacyModal {
+  max-width: 680px;
+}
+
+.privacySummary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 18px 0 12px;
+}
+
+.privacySummary article,
+.cloudDeletePanel {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-soft);
+  padding: 16px;
+}
+
+.privacySummary strong,
+.cloudDeletePanel strong {
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.privacySummary p,
+.cloudDeletePanel p {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.privacyActions {
+  display: flex;
+  margin-bottom: 14px;
+}
+
+.cloudDeletePanel {
+  border-color: #efc9bc;
+  background: #fff8f4;
+}
+
+.cloudDeletePanel label {
+  display: grid;
+  gap: 7px;
+  margin: 14px 0 10px;
+}
+
+.cloudDeletePanel label span {
+  color: #7e4b39;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.cloudDeletePanel input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #dfb5a7;
+  border-radius: 10px;
+  background: white;
+  padding: 0 12px;
+  font: inherit;
+}
+
+.cloudDeletePanel .dangerButton {
+  width: 100%;
+  margin-top: 12px;
+}
+
+.cloudDeletePanel .dangerButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.privacySuccess {
+  color: var(--green) !important;
+  font-weight: 800;
 }
 
 .projectEditFieldset {
@@ -7771,6 +7863,20 @@
     min-width: 0;
   }
 
+  .topbarUtilities {
+    width: 100%;
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .topbarUtilities .topActions {
+    flex: 1 1 100%;
+  }
+
+  .topbarUtilities .privacyButton {
+    width: 100%;
+  }
+
   .topbar h1 {
     font-size: 38px;
   }
@@ -8035,6 +8141,10 @@
 
   .projectEditor {
     grid-template-columns: 1fr;
+  }
+
+  .privacySummary {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .projectEditorHeader { align-items: flex-start; flex-direction: column; }

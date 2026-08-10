@@ -1,25 +1,3 @@
-const CREATE_SNAPSHOTS = `
-CREATE TABLE IF NOT EXISTS user_snapshots (
-  user_id TEXT PRIMARY KEY NOT NULL,
-  payload TEXT NOT NULL,
-  revision INTEGER NOT NULL DEFAULT 1,
-  updated_at TEXT NOT NULL
-)`;
-
-const CREATE_VERSIONS = `
-CREATE TABLE IF NOT EXISTS user_snapshot_versions (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id TEXT NOT NULL,
-  payload TEXT NOT NULL,
-  revision INTEGER NOT NULL,
-  archived_at TEXT NOT NULL
-)`;
-
-const CREATE_VERSIONS_INDEX = `
-CREATE INDEX IF NOT EXISTS idx_user_snapshot_versions_user_revision
-ON user_snapshot_versions(user_id, revision)
-`;
-
 export type CloudSnapshot = {
   payload: string;
   revision: number;
@@ -30,15 +8,6 @@ async function database() {
   const { env } = await import("cloudflare:workers");
   if (!env.DB) throw new Error("Cloud sync database is unavailable.");
   return env.DB;
-}
-
-export async function ensureSyncSchema() {
-  const db = await database();
-  await db.batch([
-    db.prepare(CREATE_SNAPSHOTS),
-    db.prepare(CREATE_VERSIONS),
-    db.prepare(CREATE_VERSIONS_INDEX),
-  ]);
 }
 
 export async function readCloudSnapshot(
@@ -104,4 +73,12 @@ export async function updateCloudSnapshot(
   ]);
 
   return { payload, revision: nextRevision, updatedAt: now };
+}
+
+export async function deleteCloudSnapshot(userId: string) {
+  const db = await database();
+  await db.batch([
+    db.prepare("DELETE FROM user_snapshot_versions WHERE user_id = ?1").bind(userId),
+    db.prepare("DELETE FROM user_snapshots WHERE user_id = ?1").bind(userId),
+  ]);
 }

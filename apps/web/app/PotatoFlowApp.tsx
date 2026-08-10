@@ -1,11 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import LogicGraphPrototype, {
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
   INITIAL_LOGIC_GRAPH_PAGES,
   type GraphPage,
-} from "./LogicGraphPrototype";
+} from "./logic-graph-model";
+import {
+  readSourceFileBlob,
+  readSourceFileFromCloud,
+  removeSourceFileBlob,
+  removeSourceFileFromCloud,
+  saveSourceFileBlob,
+  uploadSourceFileToCloud,
+} from "./source-file-storage";
+import { isPotatoFlowStore } from "./store-snapshot-validation";
 import styles from "./potatoflow.module.css";
+
+const LogicGraphPrototype = lazy(() => import("./LogicGraphPrototype"));
 
 type ProjectInput = {
   id?: string;
@@ -340,8 +351,6 @@ const STORAGE_BACKUP_KEY = "potatoflow:v1:backup";
 const LOCAL_UPDATED_AT_KEY = "potatoflow:v1:updated-at";
 const IMPORT_SNAPSHOTS_KEY = "potatoflow:v1:import-snapshots";
 const LOCAL_BACKUP_MAX_CHARS = 1_500_000;
-const FILE_DB_NAME = "potatoflow-files";
-const FILE_STORE_NAME = "source-files";
 const EMPTY_STORE: Store = {
   schema_version: 1,
   projects: [],
@@ -351,15 +360,7 @@ const EMPTY_STORE: Store = {
 };
 
 function isStore(value: unknown): value is Store {
-  if (!value || typeof value !== "object") return false;
-  const store = value as Partial<Store>;
-  return (
-    store.schema_version === 1 &&
-    Array.isArray(store.projects) &&
-    Array.isArray(store.tasks) &&
-    Array.isArray(store.issues) &&
-    (store.logic_graph_pages === undefined || Array.isArray(store.logic_graph_pages))
-  );
+  return isPotatoFlowStore(value);
 }
 
 function readStoredData() {
@@ -791,80 +792,6 @@ function saveImportSnapshot(store: Store, label: string) {
   } catch {
     // Import must remain possible even when browser storage is near its quota.
   }
-}
-
-function openFileDatabase() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(FILE_DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(FILE_STORE_NAME)) {
-        request.result.createObjectStore(FILE_STORE_NAME);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function storeSourceFile(id: string, file: File) {
-  const database = await openFileDatabase();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(FILE_STORE_NAME, "readwrite");
-    transaction.objectStore(FILE_STORE_NAME).put(file, id);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  database.close();
-}
-
-async function deleteStoredSourceFile(id: string) {
-  const database = await openFileDatabase();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(FILE_STORE_NAME, "readwrite");
-    transaction.objectStore(FILE_STORE_NAME).delete(id);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  database.close();
-}
-
-async function loadSourceFile(id: string) {
-  const database = await openFileDatabase();
-  const file = await new Promise<Blob | undefined>((resolve, reject) => {
-    const transaction = database.transaction(FILE_STORE_NAME, "readonly");
-    const request = transaction.objectStore(FILE_STORE_NAME).get(id);
-    request.onsuccess = () => resolve(request.result as Blob | undefined);
-    request.onerror = () => reject(request.error);
-  });
-  database.close();
-  return file;
-}
-
-async function uploadCloudSourceFile(id: string, file: File) {
-  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type || "application/octet-stream",
-      "X-File-Name": encodeURIComponent(file.name),
-    },
-    body: file,
-  });
-  if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || "文件暂时无法上传到云端。");
-  }
-}
-
-async function loadCloudSourceFile(id: string) {
-  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
-    cache: "no-store",
-  });
-  if (!response.ok) return undefined;
-  return response.blob();
-}
-
-async function deleteCloudSourceFile(id: string) {
-  await fetch(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel?: string; mark: string }> = [
@@ -1421,6 +1348,11 @@ export default function PotatoFlowApp({
   >("project");
   const [exportProjectId, setExportProjectId] = useState("");
   const [exportTaskId, setExportTaskId] = useState("");
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [cloudDeleteConfirm, setCloudDeleteConfirm] = useState("");
+  const [cloudDeleteBusy, setCloudDeleteBusy] = useState(false);
+  const [cloudDeleteError, setCloudDeleteError] = useState("");
+  const [cloudDeleteDone, setCloudDeleteDone] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<
     string | null
   >(null);
@@ -3148,8 +3080,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             uploaded_at: new Date().toISOString(),
             requirement_id: requirementId,
           };
-          await storeSourceFile(metadata.id, file);
-          if (syncEnabled) await uploadCloudSourceFile(metadata.id, file);
+          await saveSourceFileBlob(metadata.id, file);
+          if (syncEnabled) await uploadSourceFileToCloud(metadata.id, file);
           storedIds.push(metadata.id);
           return { metadata, taskTitle };
         }),
@@ -3203,9 +3135,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       setImportOpen(false);
       setActiveTab("projects");
     } catch (error) {
-      await Promise.allSettled(storedIds.map(deleteStoredSourceFile));
+      await Promise.allSettled(storedIds.map(removeSourceFileBlob));
       if (syncEnabled) {
-        await Promise.allSettled(storedIds.map(deleteCloudSourceFile));
+        await Promise.allSettled(storedIds.map(removeSourceFileFromCloud));
       }
       setImportError(
         error instanceof Error
@@ -4219,9 +4151,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     if (!planProject || deleteProjectConfirmText.trim() !== "确认") return;
     const projectId = planProject.id;
     const fileIds = (planProject.source_files || []).map((file) => file.id);
-    await Promise.allSettled(fileIds.map(deleteStoredSourceFile));
+    await Promise.allSettled(fileIds.map(removeSourceFileBlob));
     if (syncEnabled) {
-      await Promise.allSettled(fileIds.map(deleteCloudSourceFile));
+      await Promise.allSettled(fileIds.map(removeSourceFileFromCloud));
     }
     updateStore((current) => ({
       ...current,
@@ -4341,8 +4273,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     };
     try {
       setFileBusy(true);
-      await storeSourceFile(metadata.id, file);
-      if (syncEnabled) await uploadCloudSourceFile(metadata.id, file);
+      await saveSourceFileBlob(metadata.id, file);
+      if (syncEnabled) await uploadSourceFileToCloud(metadata.id, file);
       updateStore((current) => {
         const effectiveTarget = sourceUploadTarget;
         const targetMilestone = effectiveTarget.startsWith("__milestone__:")
@@ -4426,11 +4358,11 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     setFileError("");
     setFileBusy(true);
     try {
-      let blob = await loadSourceFile(metadata.id);
+      let blob = await readSourceFileBlob(metadata.id);
       if (!blob && syncEnabled) {
-        blob = await loadCloudSourceFile(metadata.id);
+        blob = await readSourceFileFromCloud(metadata.id);
         if (blob) {
-          await storeSourceFile(
+          await saveSourceFileBlob(
             metadata.id,
             new File([blob], metadata.name, { type: metadata.type }),
           );
@@ -4484,6 +4416,32 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       textarea.remove();
     }
     setExportCopied(true);
+  }
+
+  async function deleteCloudData() {
+    if (cloudDeleteConfirm.trim() !== "删除云端数据" || cloudDeleteBusy) return;
+    setCloudDeleteBusy(true);
+    setCloudDeleteError("");
+    setCloudDeleteDone(false);
+    try {
+      const response = await fetch("/api/sync", { method: "DELETE" });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error || "云端数据暂时无法删除。");
+      lastCloudPayloadRef.current = serializedStore(store);
+      syncReadyRef.current = false;
+      setCloudRevision(0);
+      setSyncChoice(null);
+      setSelectedSyncCopy(null);
+      setSyncStatus("local");
+      setCloudDeleteConfirm("");
+      setCloudDeleteDone(true);
+    } catch (error) {
+      setCloudDeleteError(
+        error instanceof Error ? error.message : "云端数据暂时无法删除。",
+      );
+    } finally {
+      setCloudDeleteBusy(false);
+    }
   }
 
   const syncStatusLabel =
@@ -4584,12 +4542,13 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 : NAV_ITEMS.find((item) => item.id === activeTab)?.label}
             </h1>
           </div>
-          {activeTab === "logic-graph" || activeTab === "memo" ? (
-            <span className={styles.prototypeStatus}>
-              {syncEnabled ? "自动保存 · 跨设备同步" : "自动保存 · 当前设备"}
-            </span>
-          ) : activeTab === "today" || activeTab === "projects" ? (
-            <div className={styles.topActions}>
+          <div className={styles.topbarUtilities}>
+            {activeTab === "logic-graph" || activeTab === "memo" ? (
+              <span className={styles.prototypeStatus}>
+                {syncEnabled ? "自动保存 · 跨设备同步" : "自动保存 · 当前设备"}
+              </span>
+            ) : activeTab === "today" || activeTab === "projects" ? (
+              <div className={styles.topActions}>
               <button
                 className={`${styles.quietButton} ${styles.mobileExportButton}`}
                 onClick={() => {
@@ -4618,8 +4577,20 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               >
                 <span>＋</span> 导入项目
               </button>
-            </div>
-          ) : null}
+              </div>
+            ) : null}
+            <button
+              className={`${styles.quietButton} ${styles.privacyButton}`}
+              onClick={() => {
+                setCloudDeleteConfirm("");
+                setCloudDeleteError("");
+                setCloudDeleteDone(false);
+                setPrivacyOpen(true);
+              }}
+            >
+              数据与隐私
+            </button>
+          </div>
         </header>
 
         {storageError && (
@@ -5047,49 +5018,53 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
         )}
 
         {activeTab === "logic-graph" && (
-          <LogicGraphPrototype
-            mode="graph"
-            openPageId={requestedLogicGraphPageId}
-            pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
-            syncEnabled={syncEnabled}
-            onPagesChange={(updater) =>
-              updateStore((current) => ({
-                ...current,
-                logic_graph_pages: updater(
-                  current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
-                ),
-              }))
-            }
-          />
+          <Suspense fallback={<div className={styles.loading}>正在打开思维网图…</div>}>
+            <LogicGraphPrototype
+              mode="graph"
+              openPageId={requestedLogicGraphPageId}
+              pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
+              syncEnabled={syncEnabled}
+              onPagesChange={(updater) =>
+                updateStore((current) => ({
+                  ...current,
+                  logic_graph_pages: updater(
+                    current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
+                  ),
+                }))
+              }
+            />
+          </Suspense>
         )}
 
         {activeTab === "memo" && (
-          <LogicGraphPrototype
-            mode="memo"
-            onOpenGraphPage={(pageId) => {
-              setRequestedLogicGraphPageId(pageId);
-              setActiveTab("logic-graph");
-            }}
-            pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
-            syncEnabled={syncEnabled}
-            calendarTasks={store.tasks
-              .filter((task) => task.status !== "cancelled")
-              .map((task) => ({
-                id: task.id,
-                title: task.title,
-                scheduledDate: task.scheduled_date || null,
-              }))}
-            onCreateCalendarTask={createCalendarTaskFromIdea}
-            onOpenCalendarTask={openCalendarTaskFromIdea}
-            onPagesChange={(updater) =>
-              updateStore((current) => ({
-                ...current,
-                logic_graph_pages: updater(
-                  current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
-                ),
-              }))
-            }
-          />
+          <Suspense fallback={<div className={styles.loading}>正在打开备忘录…</div>}>
+            <LogicGraphPrototype
+              mode="memo"
+              onOpenGraphPage={(pageId) => {
+                setRequestedLogicGraphPageId(pageId);
+                setActiveTab("logic-graph");
+              }}
+              pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
+              syncEnabled={syncEnabled}
+              calendarTasks={store.tasks
+                .filter((task) => task.status !== "cancelled")
+                .map((task) => ({
+                  id: task.id,
+                  title: task.title,
+                  scheduledDate: task.scheduled_date || null,
+                }))}
+              onCreateCalendarTask={createCalendarTaskFromIdea}
+              onOpenCalendarTask={openCalendarTaskFromIdea}
+              onPagesChange={(updater) =>
+                updateStore((current) => ({
+                  ...current,
+                  logic_graph_pages: updater(
+                    current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
+                  ),
+                }))
+              }
+            />
+          </Suspense>
         )}
 
         {activeTab === "issues" && (
@@ -6437,6 +6412,98 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 onClick={copyExportData}
               >
                 {exportCopied ? "已复制" : "复制全部"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
+      {privacyOpen && (
+        <div className={styles.modalBackdrop}>
+          <section
+            className={`${styles.modal} ${styles.privacyModal}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="privacy-title"
+          >
+            <div className={styles.modalHeader}>
+              <div>
+                <p className={styles.eyebrow}>数据控制权</p>
+                <h2 id="privacy-title">数据与隐私</h2>
+              </div>
+              <button aria-label="关闭" onClick={() => setPrivacyOpen(false)}>
+                ×
+              </button>
+            </div>
+
+            <div className={styles.privacySummary}>
+              <article>
+                <strong>本机数据</strong>
+                <p>项目、任务和网图会自动保存在当前浏览器。源文件保存在浏览器文件库中。</p>
+              </article>
+              <article>
+                <strong>云端同步</strong>
+                <p>
+                  {syncEnabled
+                    ? "登录后，数据和源文件按你的账户隔离保存，用于电脑和手机同步。"
+                    : "当前没有启用账户同步，数据只保存在这台设备的浏览器中。"}
+                </p>
+              </article>
+            </div>
+
+            <div className={styles.privacyActions}>
+              <button
+                className={styles.quietButton}
+                onClick={() => {
+                  setPrivacyOpen(false);
+                  setExportCopied(false);
+                  setExportScope("all");
+                  setExportOpen(true);
+                }}
+              >
+                导出完整备份
+              </button>
+            </div>
+
+            {syncEnabled ? (
+              <div className={styles.cloudDeletePanel}>
+                <strong>删除云端数据</strong>
+                <p>
+                  这会删除云端项目快照、历史版本和上传文件。本机数据不会删除，刷新后可重新选择是否上传。
+                </p>
+                <label>
+                  <span>输入“删除云端数据”确认</span>
+                  <input
+                    value={cloudDeleteConfirm}
+                    onChange={(event) => setCloudDeleteConfirm(event.target.value)}
+                    placeholder="删除云端数据"
+                  />
+                </label>
+                {cloudDeleteError && <p className={styles.error}>{cloudDeleteError}</p>}
+                {cloudDeleteDone && (
+                  <p className={styles.privacySuccess} role="status">
+                    云端数据和文件已经删除，当前内容仍安全保留在本机。
+                  </p>
+                )}
+                <button
+                  className={styles.dangerButton}
+                  disabled={
+                    cloudDeleteBusy || cloudDeleteConfirm.trim() !== "删除云端数据"
+                  }
+                  onClick={deleteCloudData}
+                >
+                  {cloudDeleteBusy ? "正在删除…" : "删除全部云端数据"}
+                </button>
+              </div>
+            ) : (
+              <p className={styles.modalHint}>
+                未登录状态没有云端数据。如果需要跨设备同步，可以使用 ChatGPT 账户登录。
+              </p>
+            )}
+
+            <div className={styles.modalActions}>
+              <button className={styles.quietButton} onClick={() => setPrivacyOpen(false)}>
+                完成
               </button>
             </div>
           </section>

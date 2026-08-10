@@ -5,13 +5,14 @@ import test from "node:test";
 const developmentPreviewMeta =
   /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
 
-async function render(pathname = "/", accept = "text/html") {
+async function render(pathname = "/", accept = "text/html", method = "GET") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
     new Request(`http://localhost${pathname}`, {
+      method,
       headers: { accept },
     }),
     {
@@ -78,22 +79,55 @@ test("sync comparison ignores internal revision metadata", async () => {
 });
 
 test("source files use account-scoped cloud storage", async () => {
-  const route = await readFile(
-    new URL("../app/api/files/[id]/route.ts", import.meta.url),
-    "utf8",
-  );
+  const [route, policy] = await Promise.all([
+    readFile(new URL("../app/api/files/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/files/file-policy.ts", import.meta.url), "utf8"),
+  ]);
   assert.match(route, /fileKey\(user\.userId, id\)/);
   assert.match(route, /env\.FILES/);
   assert.match(route, /MAX_FILE_BYTES/);
   assert.match(route, /\^\(source\|image\)-/);
-  assert.match(route, /"jpeg"/);
-  assert.match(route, /"png"/);
-  assert.match(route, /"webp"/);
-  assert.match(route, /hasExpectedSignature/);
-  assert.match(route, /X-Content-Type-Options/);
-  assert.match(route, /Cross-Origin-Resource-Policy/);
+  assert.match(policy, /jpeg:/);
+  assert.match(policy, /png:/);
+  assert.match(policy, /webp:/);
+  assert.match(policy, /hasExpectedSignature/);
+  assert.match(policy, /X-Content-Type-Options/);
+  assert.match(policy, /Cross-Origin-Resource-Policy/);
   assert.match(route, /customMetadata: \{ filename, extension \}/);
   assert.doesNotMatch(route, /contentType: request\.headers\.get\("content-type"\)/);
+});
+
+test("cloud deletion requires authentication", async () => {
+  const response = await render("/api/sync", "application/json", "DELETE");
+  assert.equal(response.status, 401);
+});
+
+test("sync uses shared deep validation and migration-owned schema", async () => {
+  const [route, store, validation] = await Promise.all([
+    readFile(new URL("../app/api/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/sync-store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/store-snapshot-validation.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /validatePotatoFlowStore/);
+  assert.match(route, /export async function DELETE/);
+  assert.match(route, /deleteUserCloudFiles/);
+  assert.match(store, /deleteCloudSnapshot/);
+  assert.doesNotMatch(route, /ensureSyncSchema/);
+  assert.doesNotMatch(store, /CREATE TABLE IF NOT EXISTS/);
+  assert.match(validation, /validateProjects/);
+  assert.match(validation, /validateTasks/);
+  assert.match(validation, /validateGraphPages/);
+});
+
+test("graph feature is split behind a lazy boundary", async () => {
+  const app = await readFile(
+    new URL("../app/PotatoFlowApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /lazy\(\(\) => import\("\.\/LogicGraphPrototype"\)\)/);
+  assert.match(app, /<Suspense/);
+  assert.match(app, /数据与隐私/);
+  assert.match(app, /删除全部云端数据/);
 });
 
 test("local persistence is delayed and reports storage failures", async () => {
