@@ -63,7 +63,7 @@ try {
   // 直接添加想法（内联输入框，回车提交）
   await clickBtn(/添加想法/);
   await page.waitForTimeout(400);
-  const inlineTa = page.locator('textarea[placeholder*="回车直接添加"]').first();
+  const inlineTa = page.locator('textarea[placeholder*="回车保存并继续"]').first();
   await inlineTa.fill("深度根点 完整想法内容");
   await page.keyboard.press("Enter");
   await page.waitForTimeout(800);
@@ -85,7 +85,7 @@ try {
   record("1 思维点已添加文件和图片", /test-note/.test(memoWithAtt) && (/1 图/.test(memoWithAtt) || imgAlt > 0));
 
   // 生成整篇备忘录网图
-  await page.getByRole("button", { name: /生成独立网图|生成整篇网图/ }).first().click({ force: true });
+  await page.getByRole("button", { name: /建立网图|生成整篇网图/ }).first().click({ force: true });
   await page.waitForTimeout(1500);
 
   // ── 验收：附件复制到网图 ──

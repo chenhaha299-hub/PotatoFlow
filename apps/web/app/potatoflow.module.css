@@ -3259,27 +3259,65 @@
 
 .projectEditor {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px;
   margin: 18px 0 14px;
   border: 1px solid #d7e0d3;
   border-radius: 18px;
-  background: #f7faf5;
+  background: #f5f8f3;
   padding: 18px;
 }
 
-.projectEditor label {
+.projectEditorHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 2px 4px;
+}
+
+.projectEditorHeader h3 { margin: 3px 0 0; font-size: 20px; }
+.projectEditorHeader > small { max-width: 250px; color: var(--muted); text-align: right; }
+
+.projectEditorGroup {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 13px;
+  border: 1px solid #dce5d9;
+  border-radius: 15px;
+  background: white;
+  padding: 15px;
+}
+
+.projectEditorGroupHeading {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 3px;
+}
+
+.projectEditorGroupHeading > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--green-soft);
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.projectEditorGroupHeading > div { display: grid; gap: 2px; }
+.projectEditorGroupHeading strong { font-size: 15px; }
+.projectEditorGroupHeading small { color: var(--muted); font-size: 12px; }
+
+.projectEditorGroup label {
   display: grid;
   gap: 7px;
 }
 
-.projectEditor label:nth-child(1),
-.projectEditor label:nth-child(2),
-.projectEditor label:nth-child(3) {
-  grid-column: 1 / -1;
-}
-
-.projectEditor label > span {
+.projectEditorGroup label > span {
   color: #4f5c52;
   font-size: 13px;
   font-weight: 900;
@@ -3312,6 +3350,28 @@
 .projectEditor textarea:focus {
   border-color: var(--green);
   box-shadow: 0 0 0 3px var(--green-soft);
+}
+
+.planDrawerEditing [data-project-edit-surface] {
+  border: 1px solid #d7e0d3;
+  border-radius: 16px;
+  background: #f5f8f3;
+  padding: 18px;
+  box-shadow: none;
+}
+
+.planDrawerEditing .projectMilestoneGroup,
+.planDrawerEditing .projectMilestoneGroup:nth-child(n) {
+  --milestone-accent: #4f9b70;
+  --milestone-strong: #22633f;
+  --milestone-soft: #e7f6ec;
+  --milestone-border: #b9d7c2;
+}
+
+.planDrawerEditing .improvementPanel .planModuleNumber {
+  background: #153d2b;
+  color: #efff77;
+  box-shadow: 0 5px 14px rgba(21, 61, 43, 0.16);
 }
 
 .projectEditorActions {
@@ -3824,6 +3884,39 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 11px;
   padding: 14px;
+}
+
+.taskEditorTemplate {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.taskEditorTemplate > label,
+.taskEditorTemplate > div {
+  grid-column: 1;
+}
+
+.numberedTaskField {
+  position: relative;
+  min-width: 0;
+  padding-left: 52px;
+}
+
+.numberedTaskField::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #b9d2c1;
+  border-radius: 11px;
+  background: #fbfdf9;
+  color: var(--green);
+  content: attr(data-field-number);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
 }
 
 .projectTaskFields label {
@@ -5330,6 +5423,31 @@
 .memoStudioImageRemove { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 7px; opacity: .92; }
 .memoStudioGenerateAll { border: 1px solid #bfd6c3; border-radius: 10px; background: #f2f8f2; color: #1f6a49; padding: 9px 14px; font-weight: 850; }
 .memoStudioGenerateAll:hover { background: #e6f1e6; }
+.memoStudioChildAction { border: 1px solid #cfdccf; border-radius: 10px; background: white; color: #2f6549; padding: 9px 13px; font-weight: 850; }
+.memoStudioChildAction:hover:not(:disabled) { border-color: var(--green); background: #f1f7ef; }
+.memoStudioChildAction:disabled { cursor: not-allowed; opacity: .52; }
+.memoStudioCalendarTask { display: grid; gap: 11px; margin-top: 17px; border: 1px solid #cfe0d0; border-radius: 16px; background: #f4f9f3; padding: 13px; }
+.memoStudioCalendarTaskHeading { display: flex; align-items: center; gap: 10px; }
+.memoStudioCalendarTaskHeading > span { display: grid; width: 36px; height: 36px; flex: none; place-items: center; border-radius: 11px; background: var(--green); color: white; font-weight: 900; }
+.memoStudioCalendarTaskHeading > div { display: grid; gap: 2px; min-width: 0; }
+.memoStudioCalendarTaskHeading small { color: var(--muted); font-size: 11px; line-height: 1.45; }
+.memoStudioCalendarTaskAdd { width: 100%; border: 1px dashed #9fbea7; border-radius: 11px; background: white; color: var(--green); padding: 10px; font-weight: 900; }
+.memoStudioCalendarTaskAdd:hover:not(:disabled) { border-style: solid; background: #eaf4ea; }
+.memoStudioCalendarTaskLinked { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-radius: 11px; background: white; padding: 10px 11px; }
+.memoStudioCalendarTaskLinked > div { display: grid; min-width: 0; gap: 2px; }
+.memoStudioCalendarTaskLinked small { overflow: hidden; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.memoStudioCalendarTaskLinked button { flex: none; border: 0; background: transparent; color: var(--green); font-weight: 900; }
+.memoStudioCalendarTaskForm { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.memoStudioCalendarTaskForm > p { grid-column: 1 / -1; margin: 0; color: #9a5b36; font-size: 12px; }
+.memoStudioCalendarTaskForm label { display: grid; gap: 5px; }
+.memoStudioCalendarTaskForm label:first-of-type { grid-column: 1 / -1; }
+.memoStudioCalendarTaskForm label > span { color: #4f5c52; font-size: 11px; font-weight: 850; }
+.memoStudioCalendarTaskForm input,
+.memoStudioCalendarTaskForm select { min-width: 0; width: 100%; border: 1px solid #cfdbcd; border-radius: 10px; background: white; padding: 9px; color: var(--ink); font: inherit; font-size: 12px; }
+.memoStudioCalendarTaskActions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: 7px; }
+.memoStudioCalendarTaskActions button { border: 1px solid #cdd9cb; border-radius: 9px; background: white; padding: 8px 11px; font-weight: 850; }
+.memoStudioCalendarTaskActions button:last-child { border-color: var(--green); background: var(--green); color: white; }
+.memoStudioCalendarTaskActions button:disabled { opacity: .5; }
 .memoStudioGenerate { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; margin-top: 17px; border: 0; border-radius: 16px; background: var(--green); color: white; padding: 15px; text-align: left; }
 .memoStudioGenerate span { display: grid; gap: 3px; }
 .memoStudioGenerate small { color: rgba(255,255,255,.72); }
@@ -5407,7 +5525,7 @@
 .logicNotebookHeader {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 24px;
   padding: 42px 4px 25px;
 }
@@ -7919,9 +8037,10 @@
     grid-template-columns: 1fr;
   }
 
-  .projectEditor label {
-    grid-column: 1;
-  }
+  .projectEditorHeader { align-items: flex-start; flex-direction: column; }
+  .projectEditorHeader > small { text-align: left; }
+  .projectEditorGroup { grid-template-columns: 1fr; }
+  .projectEditorGroup label { grid-column: 1; }
 
   .projectEditorActions {
     grid-column: 1;

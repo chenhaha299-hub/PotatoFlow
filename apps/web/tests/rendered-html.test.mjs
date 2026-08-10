@@ -145,7 +145,8 @@ test("source keeps the app empty and local-first", async () => {
   assert.match(app, /全部任务共用/);
   assert.match(app, /每个任务不同/);
   assert.match(app, /执行这条任务时需要查看的资料/);
-  assert.match(app, /新原文件关联任务/);
+  assert.match(app, /新原文件关联层级/);
+  assert.match(app, /__milestone__:/);
   assert.match(app, /assignSourceFile/);
   assert.match(app, /已上传文件可在下方随时重新关联/);
   assert.doesNotMatch(app, /toggleAllTaskResults/);

@@ -48,13 +48,13 @@ try {
   // 直接添加想法（内联输入框，回车提交）
   await clickBtn(/添加想法/);
   await page.waitForTimeout(400);
-  const inlineTa = page.locator('textarea[placeholder*="回车直接添加"]').first();
+  const inlineTa = page.locator('textarea[placeholder*="回车保存并继续"]').first();
   await inlineTa.fill("根思维点 完整想法内容");
   await page.keyboard.press("Enter");
   await page.waitForTimeout(800);
 
   // 生成独立网图（整篇备忘录 → 中间顶部入口）
-  await page.getByRole("button", { name: /生成独立网图|生成整篇网图/ }).first().click({ force: true });
+  await page.getByRole("button", { name: /建立网图|生成整篇网图/ }).first().click({ force: true });
   await page.waitForTimeout(1500);
 
   // ── 验收A：进入网图，检查根节点内容复制 ──

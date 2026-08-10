@@ -76,7 +76,7 @@ try {
     const addIdeaBtn = page.getByRole("button", { name: /^＋ 添加想法$/ }).first();
     await addIdeaBtn.click({ force: true });
     await page.waitForTimeout(400);
-    const inlineTa = page.locator('textarea[placeholder*="回车直接添加"]').first();
+    const inlineTa = page.locator('textarea[placeholder*="回车保存并继续"]').first();
     await inlineTa.fill(content);
     await page.keyboard.press("Enter");
     await page.waitForTimeout(800);
@@ -112,10 +112,10 @@ try {
     await memoDirItem.click({ force: true });
     await page.waitForTimeout(600);
   }
-  // 中间顶部"生成独立网图"（整篇备忘录生成一张网图）
-  const genBtn = page.getByRole("button", { name: /生成独立网图|生成整篇网图/ }).first();
+  // 中间顶部：把本篇全部思维点生成一张网图
+  const genBtn = page.getByRole("button", { name: /建立网图|生成整篇网图/ }).first();
   const genVisible = await genBtn.isVisible().catch(() => false);
-  record("中间顶部出现'生成独立网图'", genVisible);
+  record("中间顶部出现整篇网图入口", genVisible);
   if (genVisible) {
     await genBtn.click({ force: true });
     await page.waitForTimeout(1500);
