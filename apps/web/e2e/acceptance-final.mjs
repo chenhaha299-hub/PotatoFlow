@@ -7,6 +7,7 @@ const FIX = path.join(__dirname, "fixtures");
 
 const BASE = "http://127.0.0.1:3001";
 const results = [];
+let interrupted = false;
 function record(name, pass, detail = "") {
   results.push({ name, pass, detail });
   console.log(`${pass ? "✅" : "❌"} ${name}${detail ? " — " + detail : ""}`);
@@ -57,13 +58,13 @@ try {
   // 思维点1（内联输入框，回车提交）
   await clickBtn(/添加想法/);
   await page.waitForTimeout(400);
-  await page.locator('textarea[placeholder*="回车直接添加"]').first().fill("终点一 想法内容一");
+  await page.locator('textarea[placeholder*="回车保存并继续"]').first().fill("终点一 想法内容一");
   await page.keyboard.press("Enter");
   await page.waitForTimeout(800);
   // 思维点2
   await clickBtn(/添加想法/);
   await page.waitForTimeout(400);
-  await page.locator('textarea[placeholder*="回车直接添加"]').first().fill("终点二 想法内容二");
+  await page.locator('textarea[placeholder*="回车保存并继续"]').first().fill("终点二 想法内容二");
   await page.keyboard.press("Enter");
   await page.waitForTimeout(800);
 
@@ -78,10 +79,10 @@ try {
   record("1 终点一已带附件", /test-note/.test(hasAtt));
 
   // 生成整篇备忘录网图（中间顶部入口）
-  await page.getByRole("button", { name: /生成独立网图|生成整篇网图/ }).first().click({ force: true });
+  await page.getByRole("button", { name: /建立网图|生成整篇网图/ }).first().click({ force: true });
   await page.waitForTimeout(1500);
   const bodyGen = await page.locator("body").innerText();
-  record("2 生成按钮变'进入对应网图'", /进入对应网图/.test(bodyGen));
+  record("2 生成按钮变'进入整篇网图'", /进入整篇网图|进入对应网图/.test(bodyGen));
 
   // 网图目录出现 1 张整篇网图
   await gotoNav("思维网图");
@@ -151,10 +152,12 @@ try {
   record("7 删备忘录附件后网图附件保留", /test-note/.test(gAfter));
   await page.screenshot({ path: "G:\\AI\\Hermes\\work\\fin-attachment-kept.png" });
 } catch (e) {
+  interrupted = true;
   console.log("!!! 终验收中断:", e.message.slice(0, 250));
 }
 
 console.log("\n════════ 终验收汇总 ════════");
 const passed = results.filter((r) => r.pass).length;
 console.log(`${passed}/${results.length} 项通过`);
+if (interrupted || passed !== results.length) process.exitCode = 1;
 await browser.close();

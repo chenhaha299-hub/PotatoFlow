@@ -26,8 +26,9 @@ Create and update plans for the single-user PotatoFlow execution system.
 ## First-use onboarding
 
 For a new user or a blank installation, read [onboarding.md](references/onboarding.md). Guide the
-user through short interview rounds, generate a plain-language project brief for confirmation,
-then create the import JSON. Do not ask the user to understand the schema or preload any tasks.
+user through a natural conversation, infer the project and task structure, generate a plain-language
+project brief for confirmation, then create the import JSON. Do not ask the user to understand the
+schema, preload tasks, or fill PotatoFlow fields one by one.
 
 ## Choose one operation
 
@@ -59,14 +60,18 @@ For planning logic read [workflows.md](references/workflows.md). For every impor
 
 ## Project creation procedure
 
-1. Extract objective, observable success criteria, background, constraints, assumptions, and execution guidance.
-2. Ask whether source files are needed during execution. If yes, confirm whether all tasks share
-   the same files or each task uses different files; encode roles and relationships without file
-   bytes or private local paths.
-3. Build outcome-based milestones.
-4. Detail near-term tasks; keep later work coarse unless the user requests full scheduling.
-5. Give every task an outcome, reason, steps, acceptance criteria, estimate, priority, category, and date or recurrence. Ask whether that task needs a note; include only user-provided reminders or context.
-6. Keep the daily workload realistic and dependencies explicit.
+1. Understand the user's intention, current situation, preferred approach, desired arrangement,
+   constraints, and concerns through contextual follow-up questions rather than a field checklist.
+2. Infer a concise total-project title, outcome-based task titles, practical execution steps, and
+   user-supplied notes. The user should review this structure, not construct it manually.
+3. Ask about source files only when existing material is mentioned or materially affects execution.
+   If needed, confirm whether all tasks share the files or each task uses different files; encode
+   roles and relationships without file bytes or private local paths.
+4. Build milestones and schema-required details internally from context or safe defaults. Do not
+   ask extra questions merely to fill priority, category, estimate, or acceptance criteria.
+5. Detail near-term tasks; keep later work coarse unless the user requests full scheduling.
+6. Keep the daily workload realistic and dependencies explicit. Include notes only when supported
+   by the user's words; never invent reminders or context.
 7. Validate with:
 
 ```powershell

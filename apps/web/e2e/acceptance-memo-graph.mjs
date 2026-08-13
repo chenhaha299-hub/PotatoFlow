@@ -3,6 +3,7 @@ import { chromium } from "@playwright/test";
 
 const BASE = "http://127.0.0.1:3001";
 const results = [];
+let interrupted = false;
 function record(name, pass, detail = "") {
   results.push({ name, pass, detail });
   console.log(`${pass ? "✅" : "❌"} ${name}${detail ? " — " + detail : ""}`);
@@ -76,7 +77,7 @@ try {
     const addIdeaBtn = page.getByRole("button", { name: /^＋ 添加想法$/ }).first();
     await addIdeaBtn.click({ force: true });
     await page.waitForTimeout(400);
-    const inlineTa = page.locator('textarea[placeholder*="回车直接添加"]').first();
+    const inlineTa = page.locator('textarea[placeholder*="回车保存并继续"]').first();
     await inlineTa.fill(content);
     await page.keyboard.press("Enter");
     await page.waitForTimeout(800);
@@ -112,10 +113,10 @@ try {
     await memoDirItem.click({ force: true });
     await page.waitForTimeout(600);
   }
-  // 中间顶部"生成独立网图"（整篇备忘录生成一张网图）
-  const genBtn = page.getByRole("button", { name: /生成独立网图|生成整篇网图/ }).first();
+  // 中间顶部：把本篇全部思维点生成一张网图
+  const genBtn = page.getByRole("button", { name: /建立网图|生成整篇网图/ }).first();
   const genVisible = await genBtn.isVisible().catch(() => false);
-  record("中间顶部出现'生成独立网图'", genVisible);
+  record("中间顶部出现整篇网图入口", genVisible);
   if (genVisible) {
     await genBtn.click({ force: true });
     await page.waitForTimeout(1500);
@@ -129,11 +130,13 @@ try {
   const extra = ["思维点A1", "思维点A2", "思维点B1", "思维点B2"].filter((t) => g2.includes(t));
   record("网图目录不泄漏单个想法", extra.length === 0, extra.length ? "意外:" + extra.join(",") : "干净");
 } catch (e) {
+  interrupted = true;
   console.log("!!! 脚本异常中断:", e.message.slice(0, 300));
 }
 
 console.log("\n════════ 验收汇总 ════════");
 const passed = results.filter((r) => r.pass).length;
 console.log(`${passed}/${results.length} 项通过`);
+if (interrupted || passed !== results.length) process.exitCode = 1;
 if (stepInfo.length) console.log("步骤日志:", stepInfo.join(" | "));
 await browser.close();

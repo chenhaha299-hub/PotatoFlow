@@ -5,13 +5,14 @@ import test from "node:test";
 const developmentPreviewMeta =
   /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
 
-async function render(pathname = "/", accept = "text/html") {
+async function render(pathname = "/", accept = "text/html", method = "GET") {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
   workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
   const { default: worker } = await import(workerUrl.href);
 
   return worker.fetch(
     new Request(`http://localhost${pathname}`, {
+      method,
       headers: { accept },
     }),
     {
@@ -37,6 +38,26 @@ test("server-renders PotatoFlow without starter metadata", async () => {
   assert.match(html, /正在打开执行台/);
   assert.doesNotMatch(html, developmentPreviewMeta);
   assert.doesNotMatch(html, /react-loading-skeleton/);
+});
+
+test("onboarding prompt interviews naturally before AI structures the tasks", async () => {
+  const [app, onboarding, skill] = await Promise.all([
+    readFile(new URL("../app/PotatoFlowApp.tsx", import.meta.url), "utf8"),
+    readFile(
+      new URL("../../../skills/potatoflow/references/onboarding.md", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../../../skills/potatoflow/SKILL.md", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(app, /后续建档采用自然问答方式/);
+  assert.match(app, /自然说明想做什么、目前情况和安排偏好，由 AI 帮你归纳成任务/);
+  assert.match(app, /用户不需要自己决定任务怎么拆/);
+  assert.match(app, /任务名、执行步骤、备注进行归纳/);
+  assert.match(onboarding, /Use a natural conversation, not a field-by-field form/);
+  assert.match(onboarding, /the AI—not the user—maps the conversation into PotatoFlow/i);
+  assert.match(onboarding, /第二项太复杂/);
+  assert.match(skill, /fill PotatoFlow fields one by one/);
 });
 
 test("cloud sync API rejects anonymous access before touching user data", async () => {
@@ -78,17 +99,83 @@ test("sync comparison ignores internal revision metadata", async () => {
 });
 
 test("source files use account-scoped cloud storage", async () => {
-  const route = await readFile(
-    new URL("../app/api/files/[id]/route.ts", import.meta.url),
-    "utf8",
-  );
+  const [route, policy] = await Promise.all([
+    readFile(new URL("../app/api/files/[id]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/files/file-policy.ts", import.meta.url), "utf8"),
+  ]);
   assert.match(route, /fileKey\(user\.userId, id\)/);
   assert.match(route, /env\.FILES/);
   assert.match(route, /MAX_FILE_BYTES/);
   assert.match(route, /\^\(source\|image\)-/);
-  assert.match(route, /"jpeg"/);
-  assert.match(route, /"png"/);
-  assert.match(route, /"webp"/);
+  assert.match(policy, /jpeg:/);
+  assert.match(policy, /png:/);
+  assert.match(policy, /webp:/);
+  assert.match(policy, /hasExpectedSignature/);
+  assert.match(policy, /X-Content-Type-Options/);
+  assert.match(policy, /Cross-Origin-Resource-Policy/);
+  assert.match(route, /customMetadata: \{ filename, extension \}/);
+  assert.doesNotMatch(route, /contentType: request\.headers\.get\("content-type"\)/);
+});
+
+test("cloud deletion requires authentication", async () => {
+  const response = await render("/api/sync", "application/json", "DELETE");
+  assert.equal(response.status, 401);
+});
+
+test("sync uses shared deep validation and migration-owned schema", async () => {
+  const [route, store, validation] = await Promise.all([
+    readFile(new URL("../app/api/sync/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/sync-store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/store-snapshot-validation.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /validatePotatoFlowStore/);
+  assert.match(route, /export async function DELETE/);
+  assert.match(route, /deleteUserCloudFiles/);
+  assert.match(store, /deleteCloudSnapshot/);
+  assert.doesNotMatch(route, /ensureSyncSchema/);
+  assert.doesNotMatch(store, /CREATE TABLE IF NOT EXISTS/);
+  assert.match(validation, /validateProjects/);
+  assert.match(validation, /validateTasks/);
+  assert.match(validation, /validateGraphPages/);
+});
+
+test("graph feature is split behind a lazy boundary", async () => {
+  const app = await readFile(
+    new URL("../app/PotatoFlowApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /lazy\(\(\) => import\("\.\/LogicGraphPrototype"\)\)/);
+  assert.match(app, /<Suspense/);
+  assert.match(app, /数据与隐私/);
+  assert.match(app, /删除全部云端数据/);
+});
+
+test("local persistence is delayed and reports storage failures", async () => {
+  const app = await readFile(
+    new URL("../app/PotatoFlowApp.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(app, /isStorageQuotaError/);
+  assert.match(app, /LOCAL_BACKUP_MAX_CHARS/);
+  assert.match(app, /const \[storageError, setStorageError\]/);
+  assert.match(app, /window\.setTimeout\(\(\) => \{\s*const result = writeStoredData\(store\)/);
+  assert.match(app, /window\.addEventListener\("pagehide", flushLatestStore\)/);
+});
+
+test("standalone acceptance scripts fail when interrupted or incomplete", async () => {
+  const scripts = await Promise.all(
+    [
+      "acceptance-extended.mjs",
+      "acceptance-deep.mjs",
+      "acceptance-final.mjs",
+      "acceptance-memo-graph.mjs",
+    ].map((name) => readFile(new URL(`../e2e/${name}`, import.meta.url), "utf8")),
+  );
+  for (const script of scripts) {
+    assert.match(script, /let interrupted = false/);
+    assert.match(script, /interrupted = true/);
+    assert.match(script, /if \(interrupted \|\| passed !== results\.length\) process\.exitCode = 1/);
+  }
 });
 
 test("source keeps the app empty and local-first", async () => {
@@ -145,7 +232,8 @@ test("source keeps the app empty and local-first", async () => {
   assert.match(app, /全部任务共用/);
   assert.match(app, /每个任务不同/);
   assert.match(app, /执行这条任务时需要查看的资料/);
-  assert.match(app, /新原文件关联任务/);
+  assert.match(app, /新原文件关联层级/);
+  assert.match(app, /__milestone__:/);
   assert.match(app, /assignSourceFile/);
   assert.match(app, /已上传文件可在下方随时重新关联/);
   assert.doesNotMatch(app, /toggleAllTaskResults/);

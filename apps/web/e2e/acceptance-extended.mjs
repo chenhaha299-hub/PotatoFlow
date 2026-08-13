@@ -3,6 +3,7 @@ import { chromium } from "@playwright/test";
 
 const BASE = "http://127.0.0.1:3001";
 const results = [];
+let interrupted = false;
 function record(name, pass, detail = "") {
   results.push({ name, pass, detail });
   console.log(`${pass ? "✅" : "❌"} ${name}${detail ? " — " + detail : ""}`);
@@ -48,13 +49,13 @@ try {
   // 直接添加想法（内联输入框，回车提交）
   await clickBtn(/添加想法/);
   await page.waitForTimeout(400);
-  const inlineTa = page.locator('textarea[placeholder*="回车直接添加"]').first();
+  const inlineTa = page.locator('textarea[placeholder*="回车保存并继续"]').first();
   await inlineTa.fill("根思维点 完整想法内容");
   await page.keyboard.press("Enter");
   await page.waitForTimeout(800);
 
   // 生成独立网图（整篇备忘录 → 中间顶部入口）
-  await page.getByRole("button", { name: /生成独立网图|生成整篇网图/ }).first().click({ force: true });
+  await page.getByRole("button", { name: /建立网图|生成整篇网图/ }).first().click({ force: true });
   await page.waitForTimeout(1500);
 
   // ── 验收A：进入网图，检查根节点内容复制 ──
@@ -127,10 +128,12 @@ try {
   }
   await shot("E-after-reload");
 } catch (e) {
+  interrupted = true;
   console.log("!!! 扩展验收中断:", e.message.slice(0, 250));
 }
 
 console.log("\n════════ 扩展验收汇总 ════════");
 const passed = results.filter((r) => r.pass).length;
 console.log(`${passed}/${results.length} 项通过`);
+if (interrupted || passed !== results.length) process.exitCode = 1;
 await browser.close();

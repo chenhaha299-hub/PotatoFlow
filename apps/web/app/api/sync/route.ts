@@ -2,26 +2,15 @@ import { NextResponse } from "next/server";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import {
   createCloudSnapshot,
-  ensureSyncSchema,
+  deleteCloudSnapshot,
   readCloudSnapshot,
   updateCloudSnapshot,
 } from "../../../db/sync-store";
+import { validatePotatoFlowStore } from "../../store-snapshot-validation";
 
 export const dynamic = "force-dynamic";
 
 const MAX_SNAPSHOT_BYTES = 4_000_000;
-
-function isPotatoFlowStore(value: unknown) {
-  if (!value || typeof value !== "object") return false;
-  const store = value as Record<string, unknown>;
-  return (
-    store.schema_version === 1 &&
-    Array.isArray(store.projects) &&
-    Array.isArray(store.tasks) &&
-    Array.isArray(store.issues) &&
-    (store.logic_graph_pages === undefined || Array.isArray(store.logic_graph_pages))
-  );
-}
 
 function unauthorized() {
   return NextResponse.json(
@@ -34,7 +23,6 @@ export async function GET() {
   const user = await getChatGPTUser();
   if (!user) return unauthorized();
 
-  await ensureSyncSchema();
   const snapshot = await readCloudSnapshot(user.userId);
   if (!snapshot) {
     return NextResponse.json(
@@ -43,9 +31,26 @@ export async function GET() {
     );
   }
 
+  let parsedSnapshot: unknown;
+  try {
+    parsedSnapshot = JSON.parse(snapshot.payload);
+  } catch {
+    return NextResponse.json(
+      { error: "云端数据无法识别，请从本机备份重新上传。" },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  const validation = validatePotatoFlowStore(parsedSnapshot);
+  if (!validation.ok) {
+    return NextResponse.json(
+      { error: `云端数据格式无效：${validation.error}` },
+      { status: 500, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+
   return NextResponse.json(
     {
-      snapshot: JSON.parse(snapshot.payload),
+      snapshot: parsedSnapshot,
       revision: snapshot.revision,
       updated_at: snapshot.updatedAt,
     },
@@ -68,9 +73,10 @@ export async function PUT(request: Request) {
   } catch {
     return NextResponse.json({ error: "同步数据无法识别。" }, { status: 400 });
   }
-  if (!isPotatoFlowStore(body.snapshot)) {
+  const validation = validatePotatoFlowStore(body.snapshot);
+  if (!validation.ok) {
     return NextResponse.json(
-      { error: "这不是有效的 PotatoFlow 数据。" },
+      { error: `这不是有效的 PotatoFlow 数据：${validation.error}` },
       { status: 400 },
     );
   }
@@ -84,7 +90,6 @@ export async function PUT(request: Request) {
     return NextResponse.json({ error: "同步数据过大。" }, { status: 413 });
   }
 
-  await ensureSyncSchema();
   const saved =
     baseRevision === 0
       ? await createCloudSnapshot(user.userId, payload)
@@ -107,4 +112,33 @@ export async function PUT(request: Request) {
     revision: saved.revision,
     updated_at: saved.updatedAt,
   });
+}
+
+async function deleteUserCloudFiles(userId: string) {
+  const { env } = await import("cloudflare:workers");
+  if (!env.FILES) return 0;
+  const prefix = `${encodeURIComponent(userId)}/`;
+  let cursor: string | undefined;
+  let deleted = 0;
+  do {
+    const result = await env.FILES.list({ prefix, cursor });
+    const keys = result.objects.map((object) => object.key);
+    if (keys.length) {
+      await env.FILES.delete(keys);
+      deleted += keys.length;
+    }
+    cursor = result.truncated ? result.cursor : undefined;
+  } while (cursor);
+  return deleted;
+}
+
+export async function DELETE() {
+  const user = await getChatGPTUser();
+  if (!user) return unauthorized();
+  await deleteCloudSnapshot(user.userId);
+  const deletedFiles = await deleteUserCloudFiles(user.userId);
+  return NextResponse.json(
+    { ok: true, deleted_files: deletedFiles },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }

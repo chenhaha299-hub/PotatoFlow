@@ -103,7 +103,8 @@ async function navigateTo(page: Page, label: string) {
 }
 
 async function selectGraphNode(page: Page, graphName: string, label: string) {
-  const text = page.getByLabel(graphName).getByText(label, { exact: true });
+  const visibleLabel = label.length > 8 ? `${label.slice(0, 8)}…` : label;
+  const text = page.getByLabel(graphName).getByText(visibleLabel, { exact: true });
   const group = text.locator("xpath=..");
   const hitbox = group.locator("circle").last();
   const usesTouch = await page.evaluate(() => matchMedia("(pointer: coarse)").matches);
@@ -154,13 +155,159 @@ test("空白状态、导航和响应式布局可用", async ({ page }) => {
   await navigateTo(page, "问题");
   await expect(page.getByText("还没有执行问题")).toBeVisible();
   await page.getByRole("button", { name: /思维网图|网图/ }).click();
-  await expect(page.getByRole("heading", { name: "想法笔记本" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "思维网图", exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "网图目录", exact: true }).filter({ visible: true })).toHaveCount(0);
+  await expect(page.getByText("MIND GRAPH", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("每一页都是一张独立网图，可由思维点继续展开二、三级子网图。")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "新建网图" })).toBeVisible();
   await expectNoHorizontalOverflow(page);
+});
+
+test("数据与隐私入口在桌面和手机均可使用", async ({ page }) => {
+  await page.getByRole("button", { name: "数据与隐私", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "数据与隐私", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("本机数据", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "导出完整备份" })).toBeVisible();
+  await expect(page.getByText(/当前没有启用账户同步/)).toBeVisible();
+  await expectNoHorizontalOverflow(page);
+  await page.getByRole("button", { name: "完成", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "数据与隐私", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("整篇备忘录可生成网图，思维点也可添加到日历", async ({ page }) => {
+  await navigateTo(page, "备忘录");
+  await expect(page.getByRole("heading", { name: "备忘录", exact: true }).filter({ visible: true })).toHaveCount(1);
+  await expect(page.getByText("MEMO NOTEBOOK", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/先记录备忘录；需要继续推演时/)).toHaveCount(0);
+  await page.getByRole("button", { name: "＋ 新建备忘录" }).click();
+  await page.getByLabel("备忘录名称").fill("日历联动验收");
+  await page.getByRole("button", { name: "创建备忘录" }).click();
+
+  await page.getByRole("button", { name: "＋ 添加想法" }).click();
+  const continuousIdeaInput = page.getByPlaceholder(/回车保存并继续/);
+  await continuousIdeaInput.fill("安排日历验收任务并确认关联不会重复");
+  await page.keyboard.press("Enter");
+  await expect(continuousIdeaInput).toBeVisible();
+  await expect(continuousIdeaInput).toBeFocused();
+  await expect(continuousIdeaInput).toHaveValue("");
+  await continuousIdeaInput.fill("第二个思维点也必须进入整篇网图");
+  await page.keyboard.press("Enter");
+
+  const generateMemoGraph = page.getByRole("button", { name: "建立网图", exact: true });
+  await expect(generateMemoGraph).toBeEnabled();
+  await generateMemoGraph.click();
+  await expect(page.getByRole("button", { name: "进入整篇网图", exact: true })).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => {
+    const store = JSON.parse(localStorage.getItem("potatoflow:v1") || "{}");
+    const graph = store.logic_graph_pages?.find(
+      (item: { workspace?: string; title?: string }) =>
+        item.workspace === "graph" && item.title === "日历联动验收",
+    );
+    return graph?.nodes?.map((node: { content?: string; label?: string }) =>
+      `${node.label || ""} ${node.content || ""}`,
+    ) || [];
+  })).toEqual(expect.arrayContaining([
+    expect.stringContaining("安排日历验收"),
+    expect.stringContaining("第二个思维点"),
+  ]));
+
+  const thought = page.getByRole("button", { name: /安排日历验收/ }).first();
+  await thought.dblclick();
+  await page.getByRole("button", { name: "＋ 添加到日历" }).click();
+  await page.locator('input[type="date"]:visible').fill(TEST_DATE);
+  await page.getByRole("button", { name: "确认添加" }).click();
+
+  await expect(page.getByText("已添加到任务", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "＋ 添加到日历" })).toHaveCount(0);
+  const linkedData = await page.evaluate(() => {
+    const store = JSON.parse(localStorage.getItem("potatoflow:v1") || "{}");
+    const task = store.tasks?.find((item: { source_idea_node_id?: string }) => item.source_idea_node_id);
+    const node = store.logic_graph_pages
+      ?.flatMap((item: { nodes?: Array<{ calendarTaskId?: string }> }) => item.nodes || [])
+      .find((item: { calendarTaskId?: string }) => item.calendarTaskId);
+    return {
+      taskCount: store.tasks?.filter((item: { source_idea_node_id?: string }) => item.source_idea_node_id).length || 0,
+      taskId: task?.id || "",
+      nodeTaskId: node?.calendarTaskId || "",
+      date: task?.scheduled_date || "",
+    };
+  });
+  expect(linkedData.taskCount).toBe(1);
+  expect(linkedData.nodeTaskId).toBe(linkedData.taskId);
+  expect(linkedData.date).toBe(TEST_DATE);
+
+  await page.getByRole("button", { name: "查看任务 →" }).click();
+  await expect(page.getByRole("heading", { name: "安排日历验收" })).toBeVisible();
+  await expect(page.getByText("任务安排", { exact: true })).toBeVisible();
+});
+
+test("发布表单与任务编辑全局精简，详情保留执行功能", async ({ page }) => {
+  await page.getByRole("button", { name: /导入项目/ }).first().click();
+  await page.getByRole("button", { name: "＋ 手动创建" }).click();
+  await page.getByRole("button", { name: /新建总项目/ }).click();
+
+  await page.getByText("总项目（总任务标题）*", { exact: true }).locator("xpath=..").getByRole("textbox").fill("内容发布");
+  await page.getByText("任务名（子任务标题）*", { exact: true }).locator("xpath=..").getByRole("textbox").fill("整理本周素材");
+  await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
+  await page.getByRole("textbox", { name: "执行步骤 1", exact: true }).fill("挑选三条可用素材");
+  await page.getByText("备注（可选）", { exact: true }).locator("xpath=..").getByRole("textbox").fill("周五前完成");
+
+  await expect(page.getByText("为什么做", { exact: true }).filter({ visible: true })).toHaveCount(0);
+  await expect(page.getByText(/完成标准/).filter({ visible: true })).toHaveCount(0);
+  await expect(page.getByText("时间安排", { exact: true }).filter({ visible: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "创建任务", exact: true }).click();
+
+  await page
+    .locator("article")
+    .filter({ hasText: "整理本周素材" })
+    .getByRole("button", { name: /^整理本周素材 P3/ })
+    .click();
+  await expect(page.getByText("内容发布", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("heading", { name: "项目阶段" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "任务标题" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "执行步骤" })).toBeVisible();
+  for (const redundantLabel of ["任务归属", "任务信息", "行动路径", "验收清单"]) {
+    await expect(page.getByText(redundantLabel, { exact: true }).filter({ visible: true })).toHaveCount(0);
+  }
+  await expect(page.getByText("挑选三条可用素材", { exact: true })).toBeVisible();
+  const completionBox = await page.getByRole("heading", { name: "完成标准" }).boundingBox();
+  const sourceFilesBox = await page.getByText("相关源文件", { exact: true }).filter({ visible: true }).boundingBox();
+  expect((sourceFilesBox?.y || 0)).toBeGreaterThan(completionBox?.y || 0);
+  await expect(page.getByLabel("任务备注").filter({ visible: true })).toHaveValue("周五前完成");
+  await expect(page.getByText("为什么做", { exact: true }).filter({ visible: true })).toHaveCount(0);
+  await expect(page.getByText("完成标准", { exact: true }).filter({ visible: true })).toBeVisible();
+  await expect(page.getByText("统一记录本任务的结果", { exact: true }).filter({ visible: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "编辑任务", exact: true }).click();
+  const taskEditor = page.getByRole("region", { name: "编辑任务内容" });
+  await expect(taskEditor.locator("[data-field-number]")).toHaveCount(4);
+  expect(
+    await taskEditor.locator("[data-field-number]").evaluateAll((fields) =>
+      fields.map((field) => field.getAttribute("data-field-number")),
+    ),
+  ).toEqual(["01", "02", "03", "04"]);
+  await expect(taskEditor.locator("label").nth(0)).toContainText("项目阶段");
+  await expect(taskEditor.locator("label").nth(1)).toContainText("任务标题");
+  await expect(page.getByLabel("编辑任务标题")).toBeVisible();
+  await expect(taskEditor.getByText("任务详情 / 要达成的结果", { exact: true })).toHaveCount(0);
+  await expect(taskEditor.getByText("为什么做", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("编辑完成标准")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "任务内容快速导航" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "统一记录本任务的结果" })).toHaveCount(0);
+  await page.getByRole("button", { name: "完成编辑", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "任务内容快速导航" })).toBeVisible();
 });
 
 test("JSON 导入、文件关联、任务执行、问题与持久化形成闭环", async ({ page }) => {
   await importProject(page, true);
-  await page.getByRole("button", { name: "关闭项目规划" }).click();
+  const closeProjectPlanning = page.getByRole("button", { name: "关闭项目规划" });
+  if (await closeProjectPlanning.isVisible().catch(() => false)) {
+    await closeProjectPlanning.click();
+  }
   await page.getByRole("button", { name: /验证完整执行流程/ }).first().click();
   await expect(page.getByRole("heading", { name: "验证完整执行流程" })).toBeVisible();
   await expect(page.getByText("源文件 1")).toBeVisible();
@@ -215,18 +362,18 @@ test("JSON 导入、文件关联、任务执行、问题与持久化形成闭环
 
 test("自定义重复任务和日历快速改期可用", async ({ page }) => {
   await page.getByRole("button", { name: /导入项目/ }).first().click();
-  await page.getByRole("button", { name: "＋ 自定义任务" }).click();
-  await page.getByLabel("任务标题 *").fill("每个工作日复盘");
-  await page.getByLabel("任务详情 / 要达成的结果").fill("工作日结束前记录当天结果");
+  await page.getByRole("button", { name: "＋ 手动创建" }).click();
+  await page.getByRole("button", { name: /独立任务/ }).click();
+  await page
+    .getByText("任务名（子任务标题）*", { exact: true })
+    .locator("xpath=..")
+    .getByRole("textbox")
+    .fill("每个工作日复盘");
   await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
   await page.getByRole("textbox", { name: "执行步骤 1", exact: true }).fill("记录完成事项");
   await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
   await page.getByRole("textbox", { name: "执行步骤 2", exact: true }).fill("写下明日重点");
-  await page.getByLabel("时间安排").selectOption("weekdays");
-  const dateInputs = page.locator('input[type="date"]');
-  await dateInputs.nth(0).fill("2026-08-03");
-  await dateInputs.nth(1).fill("2026-08-07");
-  await page.getByRole("button", { name: "创建到首页" }).click();
+  await page.getByRole("button", { name: "创建任务", exact: true }).click();
   await expect(page.getByText("每个工作日复盘", { exact: true })).toBeVisible();
 
   await page.getByText("每个工作日复盘", { exact: true }).click();
@@ -238,18 +385,21 @@ test("自定义重复任务和日历快速改期可用", async ({ page }) => {
   }
   await page.getByRole("button", { name: "编辑任务" }).click();
   await page.getByLabel("编辑任务标题").fill("每个工作日复盘（已编辑）");
-  await page.getByLabel("编辑任务分块").fill("第一阶段｜日常复盘");
   await page.getByRole("button", { name: "＋ 添加执行步骤" }).click();
   await page.getByRole("textbox", { name: "执行步骤 3", exact: true }).fill("归档复盘记录");
+  await page.getByLabel("编辑任务重复方式").selectOption("weekdays");
+  await page.getByLabel("编辑任务开始日期").fill("2026-08-03");
+  await page.getByLabel("编辑任务结束日期").fill("2026-08-07");
   await page.getByRole("button", { name: "关闭任务详情" }).click();
   await page
     .locator('[role="alertdialog"]:visible')
     .getByRole("button", { name: "保存并退出", exact: true })
     .click();
+  await navigateTo(page, "项目");
   await expect(page.getByText("每个工作日复盘（已编辑）", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: /日历/ }).click();
-  await page.locator('[role="button"][aria-label*="1 项任务"]:visible').click();
+  await navigateTo(page, "日历");
+  await page.locator('[role="button"][aria-label*="1 项任务"]:visible').first().click();
   await expect(page.getByRole("heading", { name: /8月[3-7]日/ })).toBeVisible();
   const quickDate = page.getByLabel(/修改“每个工作日复盘（已编辑）”的日期/);
   await quickDate.fill("2026-08-10");
@@ -258,9 +408,9 @@ test("自定义重复任务和日历快速改期可用", async ({ page }) => {
 
 test("思维网图支持页面、圆点、连线、子网图和安全删除", async ({ page }) => {
   await page.getByRole("button", { name: /思维网图|网图/ }).click();
-  await page.getByRole("button", { name: "＋ 新建页面" }).click();
-  await page.getByLabel("页面名称").fill("自动化验收");
-  await page.getByRole("button", { name: "创建页面" }).click();
+  await page.getByRole("button", { name: "＋ 新建网图" }).click();
+  await page.getByLabel("网图名称").fill("自动化验收");
+  await page.getByRole("button", { name: "创建网图" }).click();
   await page.getByRole("button", { name: "目录", exact: true }).click();
   await page.getByRole("button", { name: "修改自动化验收的标题" }).click();
   await page.getByLabel("标题名称").fill("自动化验收已改名");
@@ -270,6 +420,7 @@ test("思维网图支持页面、圆点、连线、子网图和安全删除", as
   await page.getByLabel("完整想法").fill("这是一个用于验证自动标题截取和圆点详情的完整想法");
   await expect(page.getByLabel(/圆点关键词/)).toHaveValue("这是一个用于");
   await page.getByRole("button", { name: "生成圆点" }).click();
+  await selectGraphNode(page, "自动化验收已改名网图", "这是一个用于");
   await expect(page.getByRole("heading", { name: "这是一个用于" })).toBeVisible();
 
   const keywordInput = page.getByLabel(/圆点关键词/);
@@ -292,11 +443,24 @@ test("思维网图支持页面、圆点、连线、子网图和安全删除", as
   await expect(page.getByRole("button", { name: /查看图片备注1/ })).toBeVisible();
   await page.getByRole("button", { name: "删除图片备注2" }).click();
   await expect(page.getByRole("button", { name: /查看图片备注2/ })).toHaveCount(0);
+  if ((page.viewportSize()?.width || 0) <= 620) {
+    const inspector = page.getByRole("button", { name: "关闭想法详情" }).locator("xpath=ancestor::aside");
+    const inspectorBox = await inspector.boundingBox();
+    expect(inspectorBox).not.toBeNull();
+    expect(inspectorBox?.x || 0).toBeGreaterThanOrEqual(0);
+    expect((inspectorBox?.x || 0) + (inspectorBox?.width || 0)).toBeLessThanOrEqual(
+      page.viewportSize()?.width || 0,
+    );
+    await page.getByRole("button", { name: "关闭想法详情" }).click();
+  }
 
-  await page.getByRole("button", { name: "＋ 想法" }).click();
+  await page.getByRole("button", { name: "＋ 思维点" }).click();
   await page.getByPlaceholder("可以输入一句完整的话，画布上只显示精简关键词。").fill("第二个关联点");
   await page.getByRole("button", { name: "生成圆点" }).click();
-  await page.getByRole("button", { name: "关闭想法详情" }).click();
+  const closeIdeaDetail = page.getByRole("button", { name: "关闭想法详情" });
+  if (await closeIdeaDetail.isVisible().catch(() => false)) {
+    await closeIdeaDetail.click();
+  }
   await selectGraphNode(page, "自动化验收已改名网图", "一二三四五六七八九十一二三四五六七八九十一二三四五六七八九十");
   await expect(page.getByRole("button", { name: "连接其他点" })).toBeVisible();
   await page.getByRole("button", { name: "连接其他点" }).click();
@@ -307,7 +471,7 @@ test("思维网图支持页面、圆点、连线、子网图和安全删除", as
   await page.getByRole("button", { name: /为这个点建立子网图/ }).click();
   await expect(page.getByText("第 2 层网图", { exact: true })).toBeVisible();
   await page.locator("button:visible").filter({ hasText: "目录" }).first().click();
-  await expect(page.locator("h2:visible", { hasText: "想法笔记本" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "＋ 新建网图" })).toBeVisible();
 
   await page.locator('button[aria-label="删除自动化验收已改名"]:visible').click();
   await expect(page.locator('button:visible', { hasText: "永久删除" })).toBeDisabled();
@@ -318,7 +482,10 @@ test("思维网图支持页面、圆点、连线、子网图和安全删除", as
 
 test("项目重复导入会被识别为无变化", async ({ page }) => {
   await importProject(page, true);
-  await page.getByRole("button", { name: "关闭项目规划" }).click();
+  const closeProjectPlanning = page.getByRole("button", { name: "关闭项目规划" });
+  if (await closeProjectPlanning.isVisible().catch(() => false)) {
+    await closeProjectPlanning.click();
+  }
   await page.getByRole("button", { name: /导入项目/ }).first().click();
   await page.getByRole("button", { name: "导入项目 JSON" }).click();
   await page.getByRole("button", { name: "合并更新已有项目" }).click();
@@ -330,18 +497,40 @@ test("项目重复导入会被识别为无变化", async ({ page }) => {
 
 test("真实 Word、PDF、非法格式与超限文件均被正确处理", async ({ page }) => {
   await importProject(page, false);
+  await navigateTo(page, "项目");
+  await page.getByRole("button", { name: /查看并制定项目/ }).click();
   const sourceInput = page.locator('aside input[type="file"][accept*=".docx"]');
   const docxPath = path.resolve(process.cwd(), "e2e/fixtures/potatoflow-preview.docx");
   const pdfPath = path.resolve(process.cwd(), "e2e/fixtures/potatoflow-preview.pdf");
-  await page.getByLabel("新原文件关联任务").selectOption("__all__");
+  const sourceLevel = page.getByLabel("新原文件关联层级");
+  await expect(sourceLevel.locator("option")).toHaveText([
+    "本项目",
+    "阶段 01：阶段一：准备",
+    "阶段 02：阶段二：复核",
+  ]);
+  await sourceLevel.selectOption("__milestone__:阶段一：准备");
 
   await sourceInput.setInputFiles(docxPath);
   await expect(page.getByText("potatoflow-preview.docx", { exact: true })).toBeVisible();
+  await expect.poll(async () => page.evaluate(() => {
+    const store = JSON.parse(localStorage.getItem("potatoflow:v1") || "{}");
+    const fileId = store.projects?.[0]?.source_files?.find(
+      (file: { name?: string }) => file.name === "potatoflow-preview.docx",
+    )?.id;
+    return (store.tasks || []).map((task: { milestone?: string; source_file_ids?: string[] }) => ({
+      milestone: task.milestone,
+      linked: Boolean(fileId && task.source_file_ids?.includes(fileId)),
+    }));
+  })).toEqual([
+    { milestone: "阶段一：准备", linked: true },
+    { milestone: "阶段二：复核", linked: false },
+  ]);
   await page.getByText("potatoflow-preview.docx", { exact: true }).click();
   await expect(page.getByRole("heading", { name: "potatoflow-preview.docx" })).toBeVisible();
   await expect(page.getByText("PotatoFlow Word 预览验收内容")).toBeVisible();
   await page.getByRole("button", { name: "关闭原文件" }).click();
 
+  await sourceLevel.selectOption("__all__");
   await sourceInput.setInputFiles(pdfPath);
   await expect(page.getByText("potatoflow-preview.pdf", { exact: true })).toBeVisible();
   await page.getByText("potatoflow-preview.pdf", { exact: true }).click();
@@ -376,14 +565,35 @@ test("真实 Word、PDF、非法格式与超限文件均被正确处理", async 
 
 test("项目编辑撤销、全量备份、安全删除与完整恢复可闭环", async ({ page }) => {
   await importProject(page, false);
+  await navigateTo(page, "项目");
+  await page.getByRole("button", { name: "查看并制定项目 →" }).click();
   await page.getByRole("button", { name: "编辑项目" }).click();
+  await expect(page.getByText("基本信息", { exact: true })).toBeVisible();
+  await expect(page.getByText("背景与判断", { exact: true })).toBeVisible();
+  await expect(page.getByText("执行标准", { exact: true })).toBeVisible();
+  const projectEditSurfaces = page.locator("[data-project-edit-surface]");
+  await expect(projectEditSurfaces).toHaveCount(4);
+  expect(
+    new Set(
+      await projectEditSurfaces.evaluateAll((surfaces) =>
+        surfaces.map((surface) => {
+          const style = getComputedStyle(surface);
+          return `${style.backgroundColor}|${style.backgroundImage}|${style.borderTopColor}`;
+        }),
+      ),
+    ).size,
+  ).toBe(1);
+  await expect(page.getByLabel("选择要查看的项目")).toHaveCount(0);
+  await expect(page.getByText("原文件索引", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "完成编辑", exact: true })).toBeVisible();
+  await expect(page.getByText("主页执行提示", { exact: true })).toHaveCount(0);
   const projectName = page.getByLabel("项目名称");
   await projectName.fill("端到端验收项目（临时修改）");
   await page.getByRole("button", { name: /返回上一步/ }).click();
   await expect(projectName).toHaveValue("端到端验收项目");
 
   await projectName.fill("端到端验收项目（已修订）");
-  await page.getByRole("button", { name: "更新项目" }).click();
+  await page.getByRole("button", { name: "完成编辑", exact: true }).click();
   await expect(
     page.getByRole("complementary").getByRole("heading", { name: "端到端验收项目（已修订）" }),
   ).toBeVisible();
@@ -413,17 +623,16 @@ test("项目编辑撤销、全量备份、安全删除与完整恢复可闭环",
   await expect(restoreButton).toBeDisabled();
   await page.getByPlaceholder("输入：恢复").fill("恢复");
   await restoreButton.click();
-  await expect(
-    page.getByRole("button", { name: /打开 端到端验收项目（已修订） 项目总览/ }),
-  ).toBeVisible();
+  await navigateTo(page, "项目");
+  await expect(page.getByRole("heading", { name: "端到端验收项目（已修订）" })).toBeVisible();
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: /打开 端到端验收项目（已修订） 项目总览/ }),
-  ).toBeVisible();
+  await navigateTo(page, "项目");
+  await expect(page.getByRole("heading", { name: "端到端验收项目（已修订）" })).toBeVisible();
 });
 
 test("未保存修改只在确实变更时提醒，继续编辑与放弃退出均可用", async ({ page }) => {
   await importProject(page, false);
+  await page.getByRole("button", { name: /查看并制定项目/ }).click();
   await page.getByRole("button", { name: "关闭项目规划" }).click();
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
 

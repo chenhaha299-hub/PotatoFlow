@@ -8,97 +8,25 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  type GraphPage,
+  type IdeaEdge,
+  type IdeaImageNote,
+  type IdeaNode,
+  type IdeaSourceFile,
+  type IdeaStatus,
+} from "./logic-graph-model";
+import {
+  readSourceFileBlob,
+  readSourceFileFromCloud,
+  removeSourceFileBlob,
+  removeSourceFileFromCloud,
+  saveSourceFileBlob,
+  uploadSourceFileToCloud,
+} from "./source-file-storage";
 import styles from "./potatoflow.module.css";
 
-export type IdeaStatus = "red" | "orange" | "green" | "black";
-
-export type IdeaChecklist = {
-  id: string;
-  title: string;
-};
-
-export type IdeaNode = {
-  id: string;
-  label: string;
-  content: string;
-  x: number;
-  y: number;
-  childPageId?: string;
-  memoChildPageId?: string;
-  sourceFiles?: IdeaSourceFile[];
-  imageNotes?: IdeaImageNote[];
-  supplementaryPoints?: IdeaSupplementaryPoint[];
-  status?: IdeaStatus;
-  checklistId?: string;
-  generatedGraphPageId?: string;
-  fresh?: boolean;
-};
-
-export type IdeaSupplementaryPoint = {
-  id: string;
-  text: string;
-};
-
-export type IdeaSourceFile = {
-  id: string;
-  name: string;
-  type: string;
-  size: number;
-  uploadedAt: string;
-};
-
-export type IdeaImageNote = IdeaSourceFile;
-
-export type IdeaEdge = {
-  id: string;
-  source: string;
-  target: string;
-  label?: string;
-  directed?: boolean;
-  fresh?: boolean;
-};
-
-export type GraphPage = {
-  id: string;
-  title: string;
-  level: 1 | 2 | 3;
-  parentPageId?: string;
-  parentNodeId?: string;
-  nodes: IdeaNode[];
-  edges: IdeaEdge[];
-  checklists?: IdeaChecklist[];
-  workspace?: "memo" | "graph";
-  sourceMemoPageId?: string;
-  sourceMemoNodeId?: string;
-  memoGraphPageId?: string;
-  sourceRootNodeId?: string;
-  updatedLabel: string;
-};
-
 type Viewport = { x: number; y: number; scale: number };
-
-export const INITIAL_LOGIC_GRAPH_PAGES: GraphPage[] = [
-  {
-    id: "inbox",
-    title: "灵感收集",
-    level: 1,
-    workspace: "graph",
-    nodes: [],
-    edges: [],
-    checklists: [{ id: "inbox-default", title: "灵感清单" }],
-    updatedLabel: "等待第一个想法",
-  },
-  {
-    id: "memo-inbox",
-    title: "灵感收集",
-    level: 1,
-    workspace: "memo",
-    nodes: [],
-    edges: [],
-    checklists: [{ id: "memo-inbox-default", title: "灵感清单" }],
-    updatedLabel: "等待第一个想法",
-  },
-];
 
 function compactLabel(value: string) {
   const compact = value.replace(/[\s，。！？、；：,.!?;:]/g, "");
@@ -115,79 +43,6 @@ function formatFileSize(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const GRAPH_FILE_DB_NAME = "potatoflow-files";
-const GRAPH_FILE_STORE_NAME = "source-files";
-
-function openGraphFileDatabase() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(GRAPH_FILE_DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(GRAPH_FILE_STORE_NAME)) {
-        request.result.createObjectStore(GRAPH_FILE_STORE_NAME);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function saveGraphFile(id: string, file: File) {
-  const database = await openGraphFileDatabase();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(GRAPH_FILE_STORE_NAME, "readwrite");
-    transaction.objectStore(GRAPH_FILE_STORE_NAME).put(file, id);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  database.close();
-}
-
-async function readGraphFile(id: string) {
-  const database = await openGraphFileDatabase();
-  const file = await new Promise<Blob | undefined>((resolve, reject) => {
-    const transaction = database.transaction(GRAPH_FILE_STORE_NAME, "readonly");
-    const request = transaction.objectStore(GRAPH_FILE_STORE_NAME).get(id);
-    request.onsuccess = () => resolve(request.result as Blob | undefined);
-    request.onerror = () => reject(request.error);
-  });
-  database.close();
-  return file;
-}
-
-async function removeGraphFile(id: string) {
-  const database = await openGraphFileDatabase();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(GRAPH_FILE_STORE_NAME, "readwrite");
-    transaction.objectStore(GRAPH_FILE_STORE_NAME).delete(id);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  database.close();
-}
-
-async function uploadGraphFileToCloud(id: string, file: File) {
-  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type || "application/octet-stream",
-      "X-File-Name": encodeURIComponent(file.name),
-    },
-    body: file,
-  });
-  if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || "文件暂时无法上传到云端。");
-  }
-}
-
-async function readGraphFileFromCloud(id: string) {
-  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, { cache: "no-store" });
-  return response.ok ? response.blob() : undefined;
-}
-
-async function removeGraphFileFromCloud(id: string) {
-  await fetch(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
 
 type LogicGraphProps = {
   pages: GraphPage[];
@@ -196,6 +51,20 @@ type LogicGraphProps = {
   mode?: "graph" | "memo";
   openPageId?: string | null;
   onOpenGraphPage?: (pageId: string) => void;
+  calendarTasks?: Array<{
+    id: string;
+    title: string;
+    scheduledDate: string | null;
+  }>;
+  onCreateCalendarTask?: (input: {
+    sourcePageId: string;
+    sourceNodeId: string;
+    title: string;
+    objective: string;
+    scheduledDate: string | null;
+    estimatedMinutes: number;
+  }) => string;
+  onOpenCalendarTask?: (taskId: string, scheduledDate: string | null) => void;
 };
 
 export default function LogicGraphPrototype({
@@ -205,6 +74,9 @@ export default function LogicGraphPrototype({
   mode = "graph",
   openPageId = null,
   onOpenGraphPage,
+  calendarTasks = [],
+  onCreateCalendarTask,
+  onOpenCalendarTask,
 }: LogicGraphProps) {
   const setPages = onPagesChange;
   const [activePageId, setActivePageId] = useState<string | null>(null);
@@ -235,8 +107,18 @@ export default function LogicGraphPrototype({
   const [imagePreviews, setImagePreviews] = useState<Record<string, string>>({});
   const [transitionState, setTransitionState] = useState<"deeper" | "back" | "arrive" | null>(null);
   const [pageViewports, setPageViewports] = useState<Record<string, Viewport>>({});
+  const [calendarTaskDraft, setCalendarTaskDraft] = useState<{
+    nodeId: string;
+    scheduleType: "once" | "backlog";
+    scheduledDate: string;
+    estimatedMinutes: string;
+  } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const pagesRef = useRef(pages);
+  const pageViewportsRef = useRef(pageViewports);
+  pagesRef.current = pages;
+  pageViewportsRef.current = pageViewports;
   const pointerMap = useRef(new Map<number, { x: number; y: number }>());
   const panState = useRef<
     | { pointerId: number; startX: number; startY: number; origin: Viewport }
@@ -279,9 +161,6 @@ export default function LogicGraphPrototype({
   const selectedChildPage = selectedNode?.childPageId
     ? pages.find((page) => page.id === selectedNode.childPageId) || null
     : null;
-  const selectedMemoChildPage = selectedNode?.memoChildPageId
-    ? pages.find((page) => page.id === selectedNode.memoChildPageId) || null
-    : null;
   const activeChecklists = useMemo(() => {
     if (!activePage) return [];
     return activePage.checklists?.length
@@ -302,11 +181,11 @@ export default function LogicGraphPrototype({
       }
       const entries = await Promise.all(
         images.map(async (image) => {
-          let blob = await readGraphFile(image.id);
+          let blob = await readSourceFileBlob(image.id);
           if (!blob && syncEnabled) {
-            blob = await readGraphFileFromCloud(image.id);
+            blob = await readSourceFileFromCloud(image.id);
             if (blob) {
-              await saveGraphFile(image.id, new File([blob], image.name, { type: blob.type }));
+              await saveSourceFileBlob(image.id, new File([blob], image.name, { type: blob.type }));
             }
           }
           if (!blob) return null;
@@ -335,11 +214,15 @@ export default function LogicGraphPrototype({
     }),
     [mode, pages],
   );
+  const requestedGraphPageAvailable = useMemo(
+    () => Boolean(openPageId && pages.some((page) => page.id === openPageId && page.level === 1)),
+    [openPageId, pages],
+  );
 
   useEffect(() => {
     setPages((current) => {
       let changed = false;
-      let next = current.map((page) => {
+      const next = current.map((page) => {
         if (page.workspace || page.level !== 1) return page;
         changed = true;
         return { ...page, workspace: "graph" as const };
@@ -358,16 +241,18 @@ export default function LogicGraphPrototype({
   }, [activePageId, mode, topLevelPages]);
 
   useEffect(() => {
-    if (mode !== "graph" || !openPageId) return;
-    const page = pages.find((item) => item.id === openPageId && item.level === 1);
+    if (mode !== "graph" || !openPageId || !requestedGraphPageAvailable) return;
+    const page = pagesRef.current.find(
+      (item) => item.id === openPageId && item.level === 1,
+    );
     if (!page) return;
     setActivePageId(page.id);
     setSelectedNodeId(page.sourceRootNodeId || null);
     setSelectedEdgeId(null);
     setConnectSourceId(null);
     setContentView("graph");
-    setViewport(pageViewports[page.id] || { x: 40, y: 25, scale: 0.82 });
-  }, [mode, openPageId]);
+    setViewport(pageViewportsRef.current[page.id] || { x: 40, y: 25, scale: 0.82 });
+  }, [mode, openPageId, requestedGraphPageAvailable]);
 
   const memoChildPages = useMemo(
     () => {
@@ -590,8 +475,8 @@ export default function LogicGraphPrototype({
     }
     await Promise.allSettled(
       fileIds.flatMap((id) => [
-        removeGraphFile(id),
-        ...(syncEnabled ? [removeGraphFileFromCloud(id)] : []),
+        removeSourceFileBlob(id),
+        ...(syncEnabled ? [removeSourceFileFromCloud(id)] : []),
       ]),
     );
   }
@@ -633,48 +518,6 @@ export default function LogicGraphPrototype({
     window.setTimeout(() => openPageWithMotion(pageId, "deeper"), 0);
   }
 
-  function createOrOpenMemoChild(nodeOverride?: IdeaNode) {
-    const node = nodeOverride || selectedNode;
-    if (!activePage || !node) return;
-    const existingChild = node.memoChildPageId
-      ? pages.find((page) => page.id === node.memoChildPageId) || null
-      : null;
-    if (existingChild) {
-      openPageWithMotion(existingChild.id, "deeper");
-      return;
-    }
-    if (activePage.level >= 3) return;
-    const pageId = uid("memo-sub");
-    const childPage: GraphPage = {
-      id: pageId,
-      title: node.label,
-      level: (activePage.level + 1) as 2 | 3,
-      parentPageId: activePage.id,
-      parentNodeId: node.id,
-      workspace: "memo",
-      nodes: [],
-      edges: [],
-      checklists: [{ id: `${pageId}-default`, title: "想法延伸" }],
-      updatedLabel: "等待第一个想法",
-    };
-    setPages((current) =>
-      current
-        .map((page) =>
-          page.id === activePage.id
-            ? {
-                ...page,
-                nodes: page.nodes.map((n) =>
-                  n.id === node.id ? { ...n, memoChildPageId: pageId } : n,
-                ),
-                updatedLabel: "刚刚更新",
-              }
-            : page,
-        )
-        .concat(childPage),
-    );
-    window.setTimeout(() => openPageWithMotion(pageId, "deeper"), 0);
-  }
-
   async function createOrOpenMemoGraph() {
     if (mode !== "memo" || !activePage || activePage.level !== 1) return;
     if (activePage.memoGraphPageId) {
@@ -684,13 +527,13 @@ export default function LogicGraphPrototype({
 
     const cloneAttachments = async (files: IdeaSourceFile[] | undefined, prefix: string) => {
       const copies = await Promise.all((files || []).map(async (metadata) => {
-        let blob = await readGraphFile(metadata.id);
-        if (!blob && syncEnabled) blob = await readGraphFileFromCloud(metadata.id);
+        let blob = await readSourceFileBlob(metadata.id);
+        if (!blob && syncEnabled) blob = await readSourceFileFromCloud(metadata.id);
         if (!blob) return null;
         const id = uid(prefix);
         const file = new File([blob], metadata.name, { type: blob.type || metadata.type });
-        await saveGraphFile(id, file);
-        if (syncEnabled) await uploadGraphFileToCloud(id, file);
+        await saveSourceFileBlob(id, file);
+        if (syncEnabled) await uploadSourceFileToCloud(id, file);
         return { ...metadata, id, uploadedAt: new Date().toISOString() };
       }));
       return copies.filter((file): file is IdeaSourceFile => Boolean(file));
@@ -807,7 +650,7 @@ export default function LogicGraphPrototype({
     setChecklistComposerOpen(false);
   }
 
-  function createIdea() {
+  function createIdea(continueCreating: boolean) {
     if (!activePage || !ideaContent.trim()) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     const centerX = rect ? (rect.width / 2 - viewport.x) / viewport.scale : 520;
@@ -829,8 +672,13 @@ export default function LogicGraphPrototype({
       nodes: [...page.nodes, node],
       updatedLabel: "刚刚更新",
     }));
-    setComposerOpen(false);
-    setInlineIdeaOpen(false);
+    if (!continueCreating) {
+      setComposerOpen(false);
+      setInlineIdeaOpen(false);
+    }
+    setIdeaContent("");
+    setIdeaLabel("");
+    setLabelEdited(false);
     window.setTimeout(() => {
       updateActivePage((page) => ({
         ...page,
@@ -839,6 +687,37 @@ export default function LogicGraphPrototype({
         ),
       }));
     }, 360);
+  }
+
+  function openCalendarTaskComposer(node: IdeaNode) {
+    const now = new Date();
+    const localToday = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 10);
+    setCalendarTaskDraft({
+      nodeId: node.id,
+      scheduleType: "once",
+      scheduledDate: localToday,
+      estimatedMinutes: "30",
+    });
+  }
+
+  function createCalendarTaskFromSelectedNode() {
+    if (!activePage || !selectedNode || !calendarTaskDraft || !onCreateCalendarTask) return;
+    const minutes = Number(calendarTaskDraft.estimatedMinutes);
+    const taskId = onCreateCalendarTask({
+      sourcePageId: activePage.id,
+      sourceNodeId: selectedNode.id,
+      title: selectedNode.label.trim() || compactLabel(selectedNode.content),
+      objective: selectedNode.content.trim() || selectedNode.label.trim(),
+      scheduledDate:
+        calendarTaskDraft.scheduleType === "backlog"
+          ? null
+          : calendarTaskDraft.scheduledDate,
+      estimatedMinutes: Number.isFinite(minutes) && minutes > 0 ? minutes : 30,
+    });
+    updateSelectedNode({ calendarTaskId: taskId });
+    setCalendarTaskDraft(null);
   }
 
   function selectNode(nodeId: string) {
@@ -963,8 +842,8 @@ export default function LogicGraphPrototype({
     setConnectSourceId(null);
     await Promise.allSettled(
       fileIds.flatMap((id) => [
-        removeGraphFile(id),
-        ...(syncEnabled ? [removeGraphFileFromCloud(id)] : []),
+        removeSourceFileBlob(id),
+        ...(syncEnabled ? [removeSourceFileFromCloud(id)] : []),
       ]),
     );
   }
@@ -1001,8 +880,8 @@ export default function LogicGraphPrototype({
           size: file.size,
           uploadedAt: new Date().toISOString(),
         };
-        await saveGraphFile(metadata.id, file);
-        if (syncEnabled) await uploadGraphFileToCloud(metadata.id, file);
+        await saveSourceFileBlob(metadata.id, file);
+        if (syncEnabled) await uploadSourceFileToCloud(metadata.id, file);
         additions.push(metadata);
       }
       updateSelectedNode({ sourceFiles: [...(selectedNode?.sourceFiles || []), ...additions] });
@@ -1017,11 +896,11 @@ export default function LogicGraphPrototype({
     setFileError("");
     try {
       setFileBusy(true);
-      let blob = await readGraphFile(file.id);
+      let blob = await readSourceFileBlob(file.id);
       if (!blob && syncEnabled) {
-        blob = await readGraphFileFromCloud(file.id);
+        blob = await readSourceFileFromCloud(file.id);
         if (blob) {
-          await saveGraphFile(file.id, new File([blob], file.name, { type: blob.type }));
+          await saveSourceFileBlob(file.id, new File([blob], file.name, { type: blob.type }));
         }
       }
       if (!blob) throw new Error("没有找到文件内容，可能尚未同步到当前设备。");
@@ -1041,8 +920,8 @@ export default function LogicGraphPrototype({
       sourceFiles: (selectedNode?.sourceFiles || []).filter((file) => file.id !== fileId),
     });
     await Promise.allSettled([
-      removeGraphFile(fileId),
-      ...(syncEnabled ? [removeGraphFileFromCloud(fileId)] : []),
+      removeSourceFileBlob(fileId),
+      ...(syncEnabled ? [removeSourceFileFromCloud(fileId)] : []),
     ]);
   }
 
@@ -1084,8 +963,8 @@ export default function LogicGraphPrototype({
           size: file.size,
           uploadedAt: new Date().toISOString(),
         };
-        await saveGraphFile(metadata.id, file);
-        if (syncEnabled) await uploadGraphFileToCloud(metadata.id, file);
+        await saveSourceFileBlob(metadata.id, file);
+        if (syncEnabled) await uploadSourceFileToCloud(metadata.id, file);
         additions.push(metadata);
       }
       updateSelectedNode({ imageNotes: [...(selectedNode?.imageNotes || []), ...additions] });
@@ -1102,8 +981,8 @@ export default function LogicGraphPrototype({
       imageNotes: (selectedNode?.imageNotes || []).filter((image) => image.id !== imageId),
     });
     await Promise.allSettled([
-      removeGraphFile(imageId),
-      ...(syncEnabled ? [removeGraphFileFromCloud(imageId)] : []),
+      removeSourceFileBlob(imageId),
+      ...(syncEnabled ? [removeSourceFileFromCloud(imageId)] : []),
     ]);
   }
 
@@ -1257,7 +1136,7 @@ export default function LogicGraphPrototype({
     return (
       <section className={`${styles.memoStudio} ${memoLevelClass}`}>
         <header className={styles.memoStudioHeader}>
-          <h2>{activePage.level === 1 ? "备忘录" : `第 ${activePage.level} 层 · ${activePage.title}`}</h2>
+          {activePage.level > 1 && <h2>{`第 ${activePage.level} 层 · ${activePage.title}`}</h2>}
           {activePage.level === 1 && (
             <button className={styles.primaryButton} onClick={() => setNewPageOpen(true)}>＋ 新建备忘录</button>
           )}
@@ -1301,10 +1180,14 @@ export default function LogicGraphPrototype({
                 <button className={styles.quietButton} onClick={() => beginRenamePage(activePage.id)}>修改标题</button>
                 {activePage.level === 1 && (
                   <button
-                    className={styles.memoStudioGenerateAll}
+                    className={styles.memoStudioChildAction}
+                    disabled={activePage.nodes.length === 0}
                     onClick={createOrOpenMemoGraph}
+                    title={activePage.nodes.length ? undefined : "请先添加至少一个思维点"}
                   >
-                    {activePage.memoGraphPageId ? "进入对应网图" : "生成独立网图"}
+                    {activePage.memoGraphPageId
+                      ? "进入整篇网图"
+                      : "建立网图"}
                   </button>
                 )}
                 <button
@@ -1333,18 +1216,18 @@ export default function LogicGraphPrototype({
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
-                        createIdea();
+                        createIdea(true);
                       } else if (event.key === "Escape") {
                         setInlineIdeaOpen(false);
                       }
                     }}
-                    placeholder="输入想法，回车直接添加（Shift+回车换行）"
+                    placeholder="输入想法，回车保存并继续下一条（Shift+回车换行）"
                     autoFocus
                   />
                   <div className={styles.memoInlineIdeaActions}>
-                    <span>回车添加 · Esc 取消</span>
+                    <span>回车保存并继续 · Esc 结束</span>
                     <button className={styles.quietButton} onClick={() => setInlineIdeaOpen(false)}>取消</button>
-                    <button className={styles.primaryButton} onClick={createIdea} disabled={!ideaContent.trim()}>添加</button>
+                    <button className={styles.primaryButton} onClick={() => createIdea(true)} disabled={!ideaContent.trim()}>添加并继续</button>
                   </div>
                 </div>
               )}
@@ -1389,6 +1272,98 @@ export default function LogicGraphPrototype({
                   <span>完整想法</span>
                   <textarea value={selectedNode.content} onChange={(event) => updateSelectedNode({ content: event.target.value })} />
                 </label>
+                {(() => {
+                  const linkedTask = selectedNode.calendarTaskId
+                    ? calendarTasks.find((task) => task.id === selectedNode.calendarTaskId)
+                    : undefined;
+                  const draftOpen = calendarTaskDraft?.nodeId === selectedNode.id;
+                  return (
+                    <section className={styles.memoStudioCalendarTask}>
+                      <div className={styles.memoStudioCalendarTaskHeading}>
+                        <span aria-hidden="true">日</span>
+                        <div>
+                          <strong>安排到日历</strong>
+                          <small>把这个想法变成一个可以执行的待办任务</small>
+                        </div>
+                      </div>
+                      {linkedTask ? (
+                        <div className={styles.memoStudioCalendarTaskLinked}>
+                          <div>
+                            <strong>已添加到任务</strong>
+                            <small>{linkedTask.scheduledDate || "暂未安排日期"} · {linkedTask.title}</small>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => onOpenCalendarTask?.(linkedTask.id, linkedTask.scheduledDate)}
+                          >查看任务 →</button>
+                        </div>
+                      ) : draftOpen ? (
+                        <div className={styles.memoStudioCalendarTaskForm}>
+                          {selectedNode.calendarTaskId && (
+                            <p>原关联任务已不存在，可以重新添加。</p>
+                          )}
+                          <label>
+                            <span>安排方式</span>
+                            <select
+                              value={calendarTaskDraft.scheduleType}
+                              onChange={(event) => setCalendarTaskDraft((current) => current ? {
+                                ...current,
+                                scheduleType: event.target.value as "once" | "backlog",
+                              } : current)}
+                            >
+                              <option value="once">安排到指定日期</option>
+                              <option value="backlog">暂不安排日期</option>
+                            </select>
+                          </label>
+                          {calendarTaskDraft.scheduleType === "once" && (
+                            <label>
+                              <span>日期</span>
+                              <input
+                                type="date"
+                                value={calendarTaskDraft.scheduledDate}
+                                onChange={(event) => setCalendarTaskDraft((current) => current ? {
+                                  ...current,
+                                  scheduledDate: event.target.value,
+                                } : current)}
+                              />
+                            </label>
+                          )}
+                          <label>
+                            <span>预计用时</span>
+                            <select
+                              value={calendarTaskDraft.estimatedMinutes}
+                              onChange={(event) => setCalendarTaskDraft((current) => current ? {
+                                ...current,
+                                estimatedMinutes: event.target.value,
+                              } : current)}
+                            >
+                              <option value="15">15 分钟</option>
+                              <option value="30">30 分钟</option>
+                              <option value="60">1 小时</option>
+                              <option value="90">1.5 小时</option>
+                              <option value="120">2 小时</option>
+                            </select>
+                          </label>
+                          <div className={styles.memoStudioCalendarTaskActions}>
+                            <button type="button" onClick={() => setCalendarTaskDraft(null)}>取消</button>
+                            <button
+                              type="button"
+                              disabled={calendarTaskDraft.scheduleType === "once" && !calendarTaskDraft.scheduledDate}
+                              onClick={createCalendarTaskFromSelectedNode}
+                            >确认添加</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          className={styles.memoStudioCalendarTaskAdd}
+                          type="button"
+                          disabled={!onCreateCalendarTask}
+                          onClick={() => openCalendarTaskComposer(selectedNode)}
+                        >＋ 添加到日历</button>
+                      )}
+                    </section>
+                  );
+                })()}
                 <section className={styles.memoStudioAttachments}>
                   <div><strong>图片备注</strong><small>{(selectedNode.imageNotes || []).length}/9</small></div>
                   <label>＋ 添加图片<input type="file" accept="image/*" multiple disabled={imageBusy || (selectedNode.imageNotes || []).length >= 9} onChange={(event) => { attachImagesToSelectedNode(event.target.files); event.target.value = ''; }} /></label>
@@ -1413,18 +1388,10 @@ export default function LogicGraphPrototype({
                     </span>
                   ))}
                 </section>
-                <button className={styles.memoStudioGenerate} onClick={createOrOpenMemoGraph}>
-                  <span><small>{activePage.memoGraphPageId ? '整篇备忘录已生成' : '将整篇备忘录生成一张网图'}</small><strong>{activePage.memoGraphPageId ? '进入对应网图' : '生成整篇网图'}</strong></span><b>→</b>
-                </button>
-                {activePage.level < 3 && (
-                  <button className={styles.memoStudioGenerate} onClick={() => createOrOpenMemoChild(selectedNode)}>
-                    <span><small>{selectedNode.memoChildPageId ? "已有子备忘录" : "为这个想法建立子备忘录"}</small><strong>{selectedNode.memoChildPageId ? "进入子备忘录" : "建立子备忘录"}</strong></span><b>→</b>
-                  </button>
-                )}
                 <button className={styles.memoStudioDeleteThought} onClick={deleteSelectedNode}>删除这个思维点</button>
               </>
             ) : (
-              <div className={styles.memoStudioInspectorEmpty}><span>○</span><h3>选择一个思维点</h3><p>在右侧记录完整想法、状态、图片和文件，或把它生成一张独立网图。</p></div>
+              <div className={styles.memoStudioInspectorEmpty}><span>○</span><h3>选择一个思维点</h3><p>在右侧记录完整想法、状态、图片和文件；需要继续推演时，可在顶部把整篇备忘录生成网图。</p></div>
             )}
           </aside>
         </div>
@@ -1435,7 +1402,7 @@ export default function LogicGraphPrototype({
               <p className={styles.eyebrow}>NEW THOUGHT</p><h3 id="memo-new-idea">记录一个思维点</h3>
               <label><span>完整想法</span><textarea value={ideaContent} onChange={(event) => { const value = event.target.value; setIdeaContent(value); if (!labelEdited) setIdeaLabel(compactLabel(value)); }} autoFocus /></label>
               <label><span>思维点标题（自动提取6字，手动最多30字符）</span><input value={ideaLabel} onChange={(event) => { setLabelEdited(true); setIdeaLabel(event.nativeEvent.isComposing ? event.target.value : Array.from(event.target.value).slice(0, 30).join('')); }} /></label>
-              <div className={styles.logicDialogActions}><button className={styles.quietButton} onClick={() => setComposerOpen(false)}>取消</button><button className={styles.primaryButton} onClick={createIdea} disabled={!ideaContent.trim()}>添加思维点</button></div>
+              <div className={styles.logicDialogActions}><button className={styles.quietButton} onClick={() => setComposerOpen(false)}>取消</button><button className={styles.primaryButton} onClick={() => createIdea(false)} disabled={!ideaContent.trim()}>添加思维点</button></div>
             </section>
           </div>
         )}
@@ -1530,11 +1497,6 @@ export default function LogicGraphPrototype({
     return (
       <section className={styles.logicNotebook}>
         <header className={styles.logicNotebookHeader}>
-          <div>
-            <p className={styles.eyebrow}>{mode === "memo" ? "MEMO NOTEBOOK" : "MIND GRAPH"}</p>
-            <h2>{mode === "memo" ? "备忘录" : "网图目录"}</h2>
-            <p>{mode === "memo" ? "先记录备忘录；需要继续推演时，再把某个思维点生成独立网图。" : "每一页都是一张独立网图，可由思维点继续展开二、三级子网图。"}</p>
-          </div>
           <div className={styles.logicNotebookActions}>
             <button className={styles.quietButton} onClick={() => setSummaryOpen(true)}>数据总结</button>
             <button className={styles.primaryButton} onClick={() => setNewPageOpen(true)}>＋ {mode === "memo" ? "新建备忘录" : "新建网图"}</button>
@@ -1884,7 +1846,7 @@ export default function LogicGraphPrototype({
         </svg>
 
         {(selectedNode || selectedEdge) && (
-          <aside className={styles.logicInspector} onPointerDown={(event) => event.stopPropagation()}>
+          <aside className={styles.logicInspector} onPointerDown={(event) => event.stopPropagation()} onWheel={(event) => event.stopPropagation()}>
             {selectedNode ? (
               <>
                 <div className={styles.logicInspectorHeader}>
@@ -2145,7 +2107,7 @@ export default function LogicGraphPrototype({
             <small>完整原文会保留在圆点详情中。</small>
             <div className={styles.logicDialogActions}>
               <button className={styles.quietButton} onClick={() => setComposerOpen(false)}>取消</button>
-              <button className={styles.primaryButton} onClick={createIdea} disabled={!ideaContent.trim()}>生成圆点</button>
+              <button className={styles.primaryButton} onClick={() => createIdea(false)} disabled={!ideaContent.trim()}>生成圆点</button>
             </div>
           </section>
         </div>

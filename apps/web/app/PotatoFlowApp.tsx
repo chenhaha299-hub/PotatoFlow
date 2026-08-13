@@ -1,11 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import LogicGraphPrototype, {
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import {
   INITIAL_LOGIC_GRAPH_PAGES,
   type GraphPage,
-} from "./LogicGraphPrototype";
+} from "./logic-graph-model";
+import {
+  readSourceFileBlob,
+  readSourceFileFromCloud,
+  removeSourceFileBlob,
+  removeSourceFileFromCloud,
+  saveSourceFileBlob,
+  uploadSourceFileToCloud,
+} from "./source-file-storage";
+import { isPotatoFlowStore } from "./store-snapshot-validation";
 import styles from "./potatoflow.module.css";
+
+const LogicGraphPrototype = lazy(() => import("./LogicGraphPrototype"));
 
 type ProjectInput = {
   id?: string;
@@ -65,6 +76,8 @@ type TaskInput = {
   recurrence?: "daily" | "weekdays" | "weekends" | null;
   revision?: number;
   updated_at?: string;
+  source_memo_page_id?: string;
+  source_idea_node_id?: string;
 };
 
 type TaskRevision = {
@@ -278,13 +291,13 @@ const ONBOARDING_PROMPT = [
   "",
   "请回复：A、B 或 C。",
   "",
-  "后续建档要高效：充分利用用户已经提供的信息，不重复询问；能合并判断的问题必须在同一轮一次问完，只有真正影响项目结构或排期的信息缺失时才继续追问。涉及发布或其他时效性任务时，统一询问：‘请说明任务计划在什么时候发布；如有多项任务，请分别填写各项任务的预计发布时间。若暂时无法确定，可标记为“以后再安排”。’不要逐项反复询问发布时间。",
+  "后续建档采用自然问答方式。不要把 PotatoFlow 字段当成表格让用户逐项填写，也不要依次要求用户填写总项目、任务名、执行步骤和备注。先通过几轮简短对话理解用户想完成什么、目前有什么想法或准备、希望怎样推进和安排，以及有哪些提醒、限制或顾虑。提问要结合用户上一轮回答继续展开，已经说过的信息不要重复询问；只有缺失信息会明显改变任务拆分或执行方式时才继续追问。",
   "",
-  "建档采用“总项目→项目阶段→具体任务→执行步骤”的结构：milestone 是不勾选的项目阶段标题，task 是主要完成单位，steps 只写完成具体任务的实施流程，不要把每个操作拆成独立任务。用户可逐项勾选步骤并添加独立备注，整项任务只在底部统一汇报一次；新建 JSON 不要预填完成状态或执行记录。",
+  "用户不需要自己决定任务怎么拆。理解用户想法后，由 AI 主动归纳为“总项目→具体任务→执行步骤”：总项目概括最终想完成的整件事情；任务名是可以分别完成的子任务；执行步骤是完成任务的实际顺序；备注记录用户提到的提醒、偏好、限制和补充说明。不要把每个细小操作都建立成任务，细小操作应归入对应任务的执行步骤。项目阶段和其他系统必需字段可根据上下文归纳或使用安全默认值，不要为了填字段机械追问。",
   "",
-  "还要一次性确认项目是否需要 Word、PDF、Markdown 或文本源文件；如有，确认是全部任务共用文件，还是每个任务分别关联文件。任务备注也要合并成一份清单统一确认，不要逐条来回追问，不要自行编造。",
+  "如果用户提到现成文字、Word、PDF、Markdown 或文本资料，再确认这些资料在执行时是否需要保留，以及是全部任务共用还是分别关联；没有提到资料时不要把源文件问题作为固定问卷。时间安排也要通过自然对话整体了解，不要逐项反复询问。任何未知内容保持为空、标为待确认假设或采用系统默认值，不要自行编造。",
   "",
-  "信息完整后，先输出简洁的项目建档摘要，包含目标、成功标准、阶段结构、具体任务、时间安排、源文件关联方式和任务备注；等待用户回复‘确认生成’后，再输出可导入 PotatoFlow 的 JSON。",
+  "信息足够后，由 AI 先输出简洁的建档摘要，按总项目以及每个任务的任务名、执行步骤、备注进行归纳，并简短说明这样拆分的原因和先后关系。用户可以继续用自然语言提出合并、拆开、调序或改写，不需要自己修改字段。等待用户回复‘确认生成’后，再输出可导入 PotatoFlow 的 JSON；新建 JSON 不要预填完成状态、执行记录或虚构内容。",
 ].join("\n");
 const PERSONAL_PROJECT_ID = "project-personal-tasks";
 const NEW_PROJECT_OPTION = "__new_task_project__";
@@ -337,8 +350,7 @@ const STORAGE_KEY = "potatoflow:v1";
 const STORAGE_BACKUP_KEY = "potatoflow:v1:backup";
 const LOCAL_UPDATED_AT_KEY = "potatoflow:v1:updated-at";
 const IMPORT_SNAPSHOTS_KEY = "potatoflow:v1:import-snapshots";
-const FILE_DB_NAME = "potatoflow-files";
-const FILE_STORE_NAME = "source-files";
+const LOCAL_BACKUP_MAX_CHARS = 1_500_000;
 const EMPTY_STORE: Store = {
   schema_version: 1,
   projects: [],
@@ -348,15 +360,7 @@ const EMPTY_STORE: Store = {
 };
 
 function isStore(value: unknown): value is Store {
-  if (!value || typeof value !== "object") return false;
-  const store = value as Partial<Store>;
-  return (
-    store.schema_version === 1 &&
-    Array.isArray(store.projects) &&
-    Array.isArray(store.tasks) &&
-    Array.isArray(store.issues) &&
-    (store.logic_graph_pages === undefined || Array.isArray(store.logic_graph_pages))
-  );
+  return isPotatoFlowStore(value);
 }
 
 function readStoredData() {
@@ -483,13 +487,41 @@ function readStoredData() {
   return null;
 }
 
-function writeStoredData(value: Store) {
-  const serialized = JSON.stringify(value);
-  const previous = localStorage.getItem(STORAGE_KEY);
-  if (previous === serialized) return;
-  if (previous) localStorage.setItem(STORAGE_BACKUP_KEY, previous);
-  localStorage.setItem(STORAGE_KEY, serialized);
-  localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+type LocalWriteResult = "saved" | "unchanged" | "quota" | "error";
+
+function isStorageQuotaError(error: unknown) {
+  return (
+    error instanceof DOMException &&
+    (error.name === "QuotaExceededError" || error.name === "NS_ERROR_DOM_QUOTA_REACHED")
+  );
+}
+
+function writeStoredData(value: Store): LocalWriteResult {
+  try {
+    const serialized = JSON.stringify(value);
+    const previous = localStorage.getItem(STORAGE_KEY);
+    if (previous === serialized) return "unchanged";
+    if (previous && previous.length <= LOCAL_BACKUP_MAX_CHARS) {
+      localStorage.setItem(STORAGE_BACKUP_KEY, previous);
+    } else {
+      localStorage.removeItem(STORAGE_BACKUP_KEY);
+    }
+    localStorage.setItem(STORAGE_KEY, serialized);
+    localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+    return "saved";
+  } catch (error) {
+    if (!isStorageQuotaError(error)) return "error";
+    try {
+      // Prefer the current data over an older duplicate when storage is tight.
+      const serialized = JSON.stringify(value);
+      localStorage.removeItem(STORAGE_BACKUP_KEY);
+      localStorage.setItem(STORAGE_KEY, serialized);
+      localStorage.setItem(LOCAL_UPDATED_AT_KEY, new Date().toISOString());
+      return "saved";
+    } catch (retryError) {
+      return isStorageQuotaError(retryError) ? "quota" : "error";
+    }
+  }
 }
 
 function storeLatestTimestamp(value: Store) {
@@ -760,80 +792,6 @@ function saveImportSnapshot(store: Store, label: string) {
   } catch {
     // Import must remain possible even when browser storage is near its quota.
   }
-}
-
-function openFileDatabase() {
-  return new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open(FILE_DB_NAME, 1);
-    request.onupgradeneeded = () => {
-      if (!request.result.objectStoreNames.contains(FILE_STORE_NAME)) {
-        request.result.createObjectStore(FILE_STORE_NAME);
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function storeSourceFile(id: string, file: File) {
-  const database = await openFileDatabase();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(FILE_STORE_NAME, "readwrite");
-    transaction.objectStore(FILE_STORE_NAME).put(file, id);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  database.close();
-}
-
-async function deleteStoredSourceFile(id: string) {
-  const database = await openFileDatabase();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = database.transaction(FILE_STORE_NAME, "readwrite");
-    transaction.objectStore(FILE_STORE_NAME).delete(id);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  database.close();
-}
-
-async function loadSourceFile(id: string) {
-  const database = await openFileDatabase();
-  const file = await new Promise<Blob | undefined>((resolve, reject) => {
-    const transaction = database.transaction(FILE_STORE_NAME, "readonly");
-    const request = transaction.objectStore(FILE_STORE_NAME).get(id);
-    request.onsuccess = () => resolve(request.result as Blob | undefined);
-    request.onerror = () => reject(request.error);
-  });
-  database.close();
-  return file;
-}
-
-async function uploadCloudSourceFile(id: string, file: File) {
-  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
-    method: "PUT",
-    headers: {
-      "Content-Type": file.type || "application/octet-stream",
-      "X-File-Name": encodeURIComponent(file.name),
-    },
-    body: file,
-  });
-  if (!response.ok) {
-    const data = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(data?.error || "文件暂时无法上传到云端。");
-  }
-}
-
-async function loadCloudSourceFile(id: string) {
-  const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
-    cache: "no-store",
-  });
-  if (!response.ok) return undefined;
-  return response.blob();
-}
-
-async function deleteCloudSourceFile(id: string) {
-  await fetch(`/api/files/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
 
 const NAV_ITEMS: Array<{ id: TabId; label: string; mobileLabel?: string; mark: string }> = [
@@ -1390,6 +1348,11 @@ export default function PotatoFlowApp({
   >("project");
   const [exportProjectId, setExportProjectId] = useState("");
   const [exportTaskId, setExportTaskId] = useState("");
+  const [privacyOpen, setPrivacyOpen] = useState(false);
+  const [cloudDeleteConfirm, setCloudDeleteConfirm] = useState("");
+  const [cloudDeleteBusy, setCloudDeleteBusy] = useState(false);
+  const [cloudDeleteError, setCloudDeleteError] = useState("");
+  const [cloudDeleteDone, setCloudDeleteDone] = useState(false);
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<
     string | null
   >(null);
@@ -1462,9 +1425,6 @@ export default function PotatoFlowApp({
   const [collapsedTaskGroups, setCollapsedTaskGroups] = useState<
     Partial<Record<TaskCategory, boolean>>
   >({});
-  const [selectedTipProjectId, setSelectedTipProjectId] = useState<
-    string | null
-  >(null);
   const [filePreview, setFilePreview] = useState<{
     name: string;
     kind: "pdf" | "text";
@@ -1478,6 +1438,7 @@ export default function PotatoFlowApp({
     syncEnabled ? "checking" : "local",
   );
   const [syncError, setSyncError] = useState("");
+  const [storageError, setStorageError] = useState("");
   const [syncChoice, setSyncChoice] = useState<SyncChoice | null>(null);
   const [selectedSyncCopy, setSelectedSyncCopy] = useState<"local" | "cloud" | null>(null);
   const [cloudRevision, setCloudRevision] = useState(0);
@@ -1485,6 +1446,8 @@ export default function PotatoFlowApp({
   const syncReadyRef = useRef(false);
   const lastCloudPayloadRef = useRef("");
   const syncRequestRef = useRef(false);
+  const latestStoreRef = useRef(store);
+  latestStoreRef.current = store;
 
   useEffect(() => {
     const stored = readStoredData();
@@ -1494,10 +1457,28 @@ export default function PotatoFlowApp({
   }, []);
 
   useEffect(() => {
-    if (hydrated) {
-      writeStoredData(store);
-    }
+    if (!hydrated) return;
+    const timer = window.setTimeout(() => {
+      const result = writeStoredData(store);
+      setStorageError(
+        result === "quota"
+          ? "本机存储空间不足，最新修改暂时无法保存。请先导出备份或清理浏览器空间。"
+          : result === "error"
+            ? "本机保存出现问题，请先导出备份后刷新重试。"
+            : "",
+      );
+    }, 400);
+    return () => window.clearTimeout(timer);
   }, [store, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const flushLatestStore = () => {
+      writeStoredData(latestStoreRef.current);
+    };
+    window.addEventListener("pagehide", flushLatestStore);
+    return () => window.removeEventListener("pagehide", flushLatestStore);
+  }, [hydrated]);
 
   useEffect(() => {
     if (!hydrated || !syncEnabled) return;
@@ -1595,10 +1576,9 @@ export default function PotatoFlowApp({
     ) {
       return;
     }
-    const payload = serializedStore(store);
-    if (payload === lastCloudPayloadRef.current) return;
-
     const timer = window.setTimeout(async () => {
+      const payload = serializedStore(store);
+      if (payload === lastCloudPayloadRef.current) return;
       syncRequestRef.current = true;
       setSyncStatus("saving");
       try {
@@ -2171,21 +2151,6 @@ export default function PotatoFlowApp({
     });
   }, [todayTasks]);
 
-  const todayProjects = useMemo(() => {
-    const projectIds = new Set(todayTasks.map((task) => task.project_id));
-    return store.projects.filter((project) => projectIds.has(project.id));
-  }, [store.projects, todayTasks]);
-  const planEntryProjects =
-    todayProjects.length > 0 ? todayProjects : store.projects;
-  const contextProject =
-    planEntryProjects.find(
-      (project) => project.id === selectedTipProjectId,
-    ) || planEntryProjects[0];
-  const contextTipTitle =
-    contextProject?.execution_tip_title || DEFAULT_EXECUTION_TIP_TITLE;
-  const contextTips = contextProject?.execution_tips?.length
-    ? contextProject.execution_tips
-    : DEFAULT_EXECUTION_TIPS;
   const recentImportSnapshots =
     hydrated && importOpen ? readImportSnapshots() : [];
 
@@ -3115,8 +3080,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             uploaded_at: new Date().toISOString(),
             requirement_id: requirementId,
           };
-          await storeSourceFile(metadata.id, file);
-          if (syncEnabled) await uploadCloudSourceFile(metadata.id, file);
+          await saveSourceFileBlob(metadata.id, file);
+          if (syncEnabled) await uploadSourceFileToCloud(metadata.id, file);
           storedIds.push(metadata.id);
           return { metadata, taskTitle };
         }),
@@ -3169,11 +3134,10 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       resetImportSources();
       setImportOpen(false);
       setActiveTab("projects");
-      setSelectedPlanProjectId(importPreview.projectId);
     } catch (error) {
-      await Promise.allSettled(storedIds.map(deleteStoredSourceFile));
+      await Promise.allSettled(storedIds.map(removeSourceFileBlob));
       if (syncEnabled) {
-        await Promise.allSettled(storedIds.map(deleteCloudSourceFile));
+        await Promise.allSettled(storedIds.map(removeSourceFileFromCloud));
       }
       setImportError(
         error instanceof Error
@@ -3364,129 +3328,6 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     });
   }
 
-  function resetNewProjectStructureStages() {
-    setCollapsedNewProjectStages({});
-    setNewProjectStructureStages([
-      {
-        id: `stage-draft-${crypto.randomUUID()}`,
-        name: "",
-        tasks: [
-          {
-            id: `task-draft-${crypto.randomUUID()}`,
-            title: "",
-            objective: "",
-            scheduleType: "backlog",
-            scheduledDate: localDate(),
-            estimatedMinutes: "30",
-          },
-        ],
-      },
-    ]);
-  }
-
-  function createNewProjectStructure() {
-    setImportError("");
-    const projectName = customTaskDraft.newProjectName.trim();
-    if (!projectName) {
-      setImportError("请填写总项目名称。");
-      return;
-    }
-    const stages = newProjectStructureStages.map((stage) => ({
-      ...stage,
-      name: stage.name.trim(),
-      tasks: stage.tasks.map((task) => ({
-        ...task,
-        title: task.title.trim(),
-        objective: task.objective.trim(),
-      })),
-    }));
-    if (stages.some((stage) => !stage.name)) {
-      setImportError("请填写每个项目阶段的名称。");
-      return;
-    }
-    if (stages.some((stage) => stage.tasks.length === 0)) {
-      setImportError("每个项目阶段至少需要一项具体任务。");
-      return;
-    }
-    if (stages.some((stage) => stage.tasks.some((task) => !task.title))) {
-      setImportError("请填写每项具体任务的标题。");
-      return;
-    }
-    const createdAt = new Date().toISOString();
-    const projectId = `project-${crypto.randomUUID()}`;
-    const tasks: Task[] = stages.flatMap((stage) =>
-      stage.tasks.map((task) => {
-        const isBacklog = task.scheduleType === "backlog";
-        const minutes = Number(task.estimatedMinutes);
-        return {
-          id: `task-${crypto.randomUUID()}`,
-          project_id: projectId,
-          parent_id: null,
-          milestone: stage.name,
-          title: task.title,
-          objective: task.objective || task.title,
-          why: "",
-          note: "",
-          result_report: "",
-          steps: [],
-          acceptance_criteria: [`完成“${task.title}”并记录结果`],
-          scheduled_date: isBacklog ? null : task.scheduledDate,
-          end_date: null,
-          recurrence: null,
-          occurrence_results: {},
-          estimated_minutes: minutes > 0 ? minutes : 30,
-          priority: 3,
-          dependencies: [],
-          category: "work",
-          status: isBacklog ? "backlog" : "scheduled",
-          created_at: createdAt,
-          revision: 1,
-          updated_at: createdAt,
-          revision_history: [],
-          notes: [],
-          step_results: [],
-          step_reports: [],
-          criterion_results: [false],
-        };
-      }),
-    );
-    const project: Project = {
-      id: projectId,
-      name: projectName,
-      objective:
-        customTaskDraft.newProjectObjective.trim() ||
-        `管理“${projectName}”相关任务。`,
-      success_criteria: [],
-      background: "",
-      constraints: [],
-      assumptions: [],
-      execution_improvements: "",
-      execution_tip_title: DEFAULT_EXECUTION_TIP_TITLE,
-      execution_tips: DEFAULT_EXECUTION_TIPS,
-      milestones: stages.map((stage) => stage.name),
-      status: "active",
-      created_at: createdAt,
-      source_files: [],
-      revision: 1,
-      updated_at: createdAt,
-    };
-    updateStore((current) => ({
-      ...current,
-      projects: [...current.projects, project],
-      tasks: [...current.tasks, ...tasks],
-    }));
-    setActiveTab("projects");
-    setSelectedPlanProjectId(projectId);
-    setImportOpen(false);
-    setCustomTaskDraft((current) => ({
-      ...current,
-      projectId: PERSONAL_PROJECT_ID,
-      newProjectName: "",
-      newProjectObjective: "",
-    }));
-    resetNewProjectStructureStages();
-  }
-
   function createCustomTask() {
     setImportError("");
     const title = customTaskDraft.title.trim();
@@ -3666,6 +3507,94 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
       category: "work",
       priority: 3,
     });
+  }
+
+  function createCalendarTaskFromIdea(input: {
+    sourcePageId: string;
+    sourceNodeId: string;
+    title: string;
+    objective: string;
+    scheduledDate: string | null;
+    estimatedMinutes: number;
+  }) {
+    const createdAt = new Date().toISOString();
+    const taskId = `task-${crypto.randomUUID()}`;
+    const title = input.title.trim() || "备忘录待办";
+    const objective = input.objective.trim() || title;
+    const task: Task = {
+      id: taskId,
+      project_id: PERSONAL_PROJECT_ID,
+      parent_id: null,
+      milestone: "来自备忘录",
+      title,
+      objective,
+      why: "",
+      note: "由备忘录思维点添加。",
+      result_report: "",
+      steps: [],
+      acceptance_criteria: [`完成“${title}”并记录结果`],
+      scheduled_date: input.scheduledDate,
+      end_date: null,
+      recurrence: null,
+      occurrence_results: {},
+      estimated_minutes: input.estimatedMinutes,
+      priority: 3,
+      dependencies: [],
+      category: "work",
+      status: input.scheduledDate ? "scheduled" : "backlog",
+      created_at: createdAt,
+      revision: 1,
+      updated_at: createdAt,
+      revision_history: [],
+      notes: [],
+      step_results: [],
+      step_reports: [],
+      criterion_results: [false],
+      source_memo_page_id: input.sourcePageId,
+      source_idea_node_id: input.sourceNodeId,
+    };
+    updateStore((current) => {
+      const personalProjectExists = current.projects.some(
+        (project) => project.id === PERSONAL_PROJECT_ID,
+      );
+      const personalProject: Project = {
+        id: PERSONAL_PROJECT_ID,
+        name: "个人任务",
+        objective: "记录不属于现有项目的日常、工作、娱乐和其他任务。",
+        success_criteria: [],
+        background: "",
+        constraints: [],
+        assumptions: [],
+        execution_improvements: "",
+        execution_tip_title: DEFAULT_EXECUTION_TIP_TITLE,
+        execution_tips: DEFAULT_EXECUTION_TIPS,
+        status: "active",
+        created_at: createdAt,
+        source_files: [],
+        revision: 1,
+        updated_at: createdAt,
+      };
+      return {
+        ...current,
+        projects: personalProjectExists
+          ? current.projects
+          : [...current.projects, personalProject],
+        tasks: [...current.tasks, task],
+      };
+    });
+    return taskId;
+  }
+
+  function openCalendarTaskFromIdea(taskId: string, scheduledDate: string | null) {
+    if (scheduledDate) {
+      const [year, month] = scheduledDate.split("-").map(Number);
+      if (year && month) setCalendarMonth(new Date(year, month - 1, 1));
+      setSelectedCalendarDate(scheduledDate);
+      setActiveTab("calendar");
+    } else {
+      setActiveTab("projects");
+    }
+    openTask(taskId, scheduledDate);
   }
 
   function toggleTaskCompletion(taskId: string, occurrenceDate?: string) {
@@ -4222,9 +4151,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     if (!planProject || deleteProjectConfirmText.trim() !== "确认") return;
     const projectId = planProject.id;
     const fileIds = (planProject.source_files || []).map((file) => file.id);
-    await Promise.allSettled(fileIds.map(deleteStoredSourceFile));
+    await Promise.allSettled(fileIds.map(removeSourceFileBlob));
     if (syncEnabled) {
-      await Promise.allSettled(fileIds.map(deleteCloudSourceFile));
+      await Promise.allSettled(fileIds.map(removeSourceFileFromCloud));
     }
     updateStore((current) => ({
       ...current,
@@ -4243,13 +4172,32 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     finishClosingPlan();
   }
 
-  function sourceAssignmentValue(fileId: string, tasks: Task[]) {
+  const milestoneSourceTarget = (milestone: string) =>
+    `__milestone__:${milestone}`;
+
+  function sourceAssignmentValue(
+    fileId: string,
+    tasks: Task[],
+    milestones: string[],
+  ) {
     const assigned = tasks.filter((task) =>
       (task.source_file_ids || []).includes(fileId),
     );
     if (assigned.length === 0) return "__none__";
     if (tasks.length > 0 && assigned.length === tasks.length) return "__all__";
-    if (assigned.length === 1) return assigned[0].id;
+    const matchingMilestone = milestones.find((milestone) => {
+      const milestoneTasks = tasks.filter(
+        (task) => (task.milestone?.trim() || "未分组任务") === milestone,
+      );
+      return (
+        milestoneTasks.length > 0 &&
+        assigned.length === milestoneTasks.length &&
+        milestoneTasks.every((task) =>
+          (task.source_file_ids || []).includes(fileId),
+        )
+      );
+    });
+    if (matchingMilestone) return milestoneSourceTarget(matchingMilestone);
     return "__multiple__";
   }
 
@@ -4258,12 +4206,18 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     fileId: string,
     target: string,
   ) {
+    const targetMilestone = target.startsWith("__milestone__:")
+      ? target.slice("__milestone__:".length)
+      : null;
     const applyAssignment = (task: Task) => {
       if (task.project_id !== projectId) return task;
       const withoutFile = (task.source_file_ids || []).filter(
         (id) => id !== fileId,
       );
-      const shouldAttach = target === "__all__" || task.id === target;
+      const shouldAttach =
+        target === "__all__" ||
+        (targetMilestone !== null &&
+          (task.milestone?.trim() || "未分组任务") === targetMilestone);
       return {
         ...task,
         source_file_ids: shouldAttach
@@ -4319,19 +4273,19 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     };
     try {
       setFileBusy(true);
-      await storeSourceFile(metadata.id, file);
-      if (syncEnabled) await uploadCloudSourceFile(metadata.id, file);
+      await saveSourceFileBlob(metadata.id, file);
+      if (syncEnabled) await uploadSourceFileToCloud(metadata.id, file);
       updateStore((current) => {
-        const effectiveTarget = current.tasks.some(
-          (task) => task.project_id === projectId,
-        )
-          ? sourceUploadTarget
-          : "__none__";
+        const effectiveTarget = sourceUploadTarget;
+        const targetMilestone = effectiveTarget.startsWith("__milestone__:")
+          ? effectiveTarget.slice("__milestone__:".length)
+          : null;
         const tasks = current.tasks.map((task) => {
           if (task.project_id !== projectId) return task;
           const shouldAttach =
             effectiveTarget === "__all__" ||
-            task.id === effectiveTarget;
+            (targetMilestone !== null &&
+              (task.milestone?.trim() || "未分组任务") === targetMilestone);
           return shouldAttach
             ? {
                 ...task,
@@ -4364,11 +4318,15 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
         };
       });
       if (projectTaskDraftProjectId === projectId) {
+        const targetMilestone = sourceUploadTarget.startsWith("__milestone__:")
+          ? sourceUploadTarget.slice("__milestone__:".length)
+          : null;
         setProjectTaskDrafts((current) =>
           current.map((task) => {
             const shouldAttach =
               sourceUploadTarget === "__all__" ||
-              task.id === sourceUploadTarget;
+              (targetMilestone !== null &&
+                (task.milestone?.trim() || "未分组任务") === targetMilestone);
             return shouldAttach
               ? {
                   ...task,
@@ -4400,11 +4358,11 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     setFileError("");
     setFileBusy(true);
     try {
-      let blob = await loadSourceFile(metadata.id);
+      let blob = await readSourceFileBlob(metadata.id);
       if (!blob && syncEnabled) {
-        blob = await loadCloudSourceFile(metadata.id);
+        blob = await readSourceFileFromCloud(metadata.id);
         if (blob) {
-          await storeSourceFile(
+          await saveSourceFileBlob(
             metadata.id,
             new File([blob], metadata.name, { type: metadata.type }),
           );
@@ -4460,6 +4418,32 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
     setExportCopied(true);
   }
 
+  async function deleteCloudData() {
+    if (cloudDeleteConfirm.trim() !== "删除云端数据" || cloudDeleteBusy) return;
+    setCloudDeleteBusy(true);
+    setCloudDeleteError("");
+    setCloudDeleteDone(false);
+    try {
+      const response = await fetch("/api/sync", { method: "DELETE" });
+      const data = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) throw new Error(data?.error || "云端数据暂时无法删除。");
+      lastCloudPayloadRef.current = serializedStore(store);
+      syncReadyRef.current = false;
+      setCloudRevision(0);
+      setSyncChoice(null);
+      setSelectedSyncCopy(null);
+      setSyncStatus("local");
+      setCloudDeleteConfirm("");
+      setCloudDeleteDone(true);
+    } catch (error) {
+      setCloudDeleteError(
+        error instanceof Error ? error.message : "云端数据暂时无法删除。",
+      );
+    } finally {
+      setCloudDeleteBusy(false);
+    }
+  }
+
   const syncStatusLabel =
     syncStatus === "checking"
       ? "正在检查云端数据"
@@ -4504,7 +4488,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
   }
 
   return (
-    <div className={styles.shell}>
+    <div className={`${styles.shell} ${styles.motionStandard}`}>
       <aside className={styles.sidebar}>
         <div className={styles.brand}>
           <span className={styles.brandMark}>PF</span>
@@ -4558,12 +4542,13 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 : NAV_ITEMS.find((item) => item.id === activeTab)?.label}
             </h1>
           </div>
-          {activeTab === "logic-graph" || activeTab === "memo" ? (
-            <span className={styles.prototypeStatus}>
-              {syncEnabled ? "自动保存 · 跨设备同步" : "自动保存 · 当前设备"}
-            </span>
-          ) : activeTab === "today" || activeTab === "projects" ? (
-            <div className={styles.topActions}>
+          <div className={styles.topbarUtilities}>
+            {activeTab === "logic-graph" || activeTab === "memo" ? (
+              <span className={styles.prototypeStatus}>
+                {syncEnabled ? "自动保存 · 跨设备同步" : "自动保存 · 当前设备"}
+              </span>
+            ) : activeTab === "today" || activeTab === "projects" ? (
+              <div className={styles.topActions}>
               <button
                 className={`${styles.quietButton} ${styles.mobileExportButton}`}
                 onClick={() => {
@@ -4592,55 +4577,28 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               >
                 <span>＋</span> 导入项目
               </button>
-            </div>
-          ) : null}
+              </div>
+            ) : null}
+            <button
+              className={`${styles.quietButton} ${styles.privacyButton}`}
+              onClick={() => {
+                setCloudDeleteConfirm("");
+                setCloudDeleteError("");
+                setCloudDeleteDone(false);
+                setPrivacyOpen(true);
+              }}
+            >
+              数据与隐私
+            </button>
+          </div>
         </header>
 
-        {(activeTab === "today" || activeTab === "projects") && <section
-          className={`${styles.syncBar} ${
-            syncStatus === "offline" || syncStatus === "error"
-              ? styles.syncBarWarning
-              : ""
-          }`}
-          aria-live="polite"
-        >
-          <div>
-            <span className={styles.syncDot} aria-hidden="true" />
-            <div>
-              <strong>{syncStatusLabel}</strong>
-              <small>
-                {syncEnabled
-                  ? "任务、进度、备注、问题和 Word、PDF 原文件都会在你的设备间同步。"
-                  : "登录同一个 ChatGPT 账号，即可在电脑和手机查看同一份任务数据。"}
-              </small>
-            </div>
-          </div>
-          {syncEnabled ? (
-            <div className={styles.syncBarActions}>
-              {(syncStatus === "offline" || syncStatus === "local") && (
-                <button
-                  className={styles.quietButton}
-                  onClick={() => setSyncRetry((value) => value + 1)}
-                >
-                  重新连接
-                </button>
-              )}
-              <a
-                className={styles.syncTextLink}
-                href="/signout-with-chatgpt?return_to=%2F"
-              >
-                退出登录
-              </a>
-            </div>
-          ) : (
-            <a
-              className={styles.primaryButton}
-              href="/signin-with-chatgpt?return_to=%2F"
-            >
-              登录并开启同步
-            </a>
-          )}
-        </section>}
+        {storageError && (
+          <p className={styles.syncError} role="alert">
+            {storageError}
+          </p>
+        )}
+
 
         {activeTab === "today" && (
           <section
@@ -4870,60 +4828,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               )}
             </div>
 
-            <aside
-              className={`${styles.contextPanel} ${
-                contextProject ? styles.contextPanelInteractive : ""
-              }`}
-              role={contextProject ? "button" : undefined}
-              tabIndex={contextProject ? 0 : undefined}
-              aria-label={
-                contextProject
-                  ? `打开 ${contextProject.name} 项目总览`
-                  : "执行提示"
-              }
-              onClick={() =>
-                setSelectedPlanProjectId(contextProject?.id || null)
-              }
-              onKeyDown={(event) => {
-                if (
-                  contextProject &&
-                  (event.key === "Enter" || event.key === " ")
-                ) {
-                  event.preventDefault();
-                  setSelectedPlanProjectId(contextProject.id);
-                }
-              }}
-            >
-              <div className={styles.contextMark}>→</div>
-              <p className={styles.eyebrow}>
-                {contextProject?.name || "执行提示"}
-              </p>
-              {planEntryProjects.length > 1 && (
-                <select
-                  className={styles.contextProjectSelect}
-                  aria-label="选择要查看执行提示的项目"
-                  value={contextProject?.id || ""}
-                  onClick={(event) => event.stopPropagation()}
-                  onKeyDown={(event) => event.stopPropagation()}
-                  onChange={(event) => {
-                    event.stopPropagation();
-                    setSelectedTipProjectId(event.target.value);
-                  }}
-                >
-                  {planEntryProjects.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <h2>{contextTipTitle}</h2>
-              <ul>
-                {contextTips.map((tip) => (
-                  <li key={tip}>{tip}</li>
-                ))}
-              </ul>
-            </aside>
+            
           </section>
         )}
 
@@ -5066,7 +4971,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       <div className={styles.progressTrack}>
                         <i
                           style={{
-                            width: `${progress}%`,
+                            transform: `scaleX(${progress / 100})`,
                           }}
                         />
                       </div>
@@ -5113,40 +5018,53 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
         )}
 
         {activeTab === "logic-graph" && (
-          <LogicGraphPrototype
-            mode="graph"
-            openPageId={requestedLogicGraphPageId}
-            pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
-            syncEnabled={syncEnabled}
-            onPagesChange={(updater) =>
-              updateStore((current) => ({
-                ...current,
-                logic_graph_pages: updater(
-                  current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
-                ),
-              }))
-            }
-          />
+          <Suspense fallback={<div className={styles.loading}>正在打开思维网图…</div>}>
+            <LogicGraphPrototype
+              mode="graph"
+              openPageId={requestedLogicGraphPageId}
+              pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
+              syncEnabled={syncEnabled}
+              onPagesChange={(updater) =>
+                updateStore((current) => ({
+                  ...current,
+                  logic_graph_pages: updater(
+                    current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
+                  ),
+                }))
+              }
+            />
+          </Suspense>
         )}
 
         {activeTab === "memo" && (
-          <LogicGraphPrototype
-            mode="memo"
-            onOpenGraphPage={(pageId) => {
-              setRequestedLogicGraphPageId(pageId);
-              setActiveTab("logic-graph");
-            }}
-            pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
-            syncEnabled={syncEnabled}
-            onPagesChange={(updater) =>
-              updateStore((current) => ({
-                ...current,
-                logic_graph_pages: updater(
-                  current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
-                ),
-              }))
-            }
-          />
+          <Suspense fallback={<div className={styles.loading}>正在打开备忘录…</div>}>
+            <LogicGraphPrototype
+              mode="memo"
+              onOpenGraphPage={(pageId) => {
+                setRequestedLogicGraphPageId(pageId);
+                setActiveTab("logic-graph");
+              }}
+              pages={store.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES}
+              syncEnabled={syncEnabled}
+              calendarTasks={store.tasks
+                .filter((task) => task.status !== "cancelled")
+                .map((task) => ({
+                  id: task.id,
+                  title: task.title,
+                  scheduledDate: task.scheduled_date || null,
+                }))}
+              onCreateCalendarTask={createCalendarTaskFromIdea}
+              onOpenCalendarTask={openCalendarTaskFromIdea}
+              onPagesChange={(updater) =>
+                updateStore((current) => ({
+                  ...current,
+                  logic_graph_pages: updater(
+                    current.logic_graph_pages ?? INITIAL_LOGIC_GRAPH_PAGES,
+                  ),
+                }))
+              }
+            />
+          </Suspense>
         )}
 
         {activeTab === "issues" && (
@@ -5692,7 +5610,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             ) : (
               <>
                 <p className={styles.modalHint}>
-                  先选择要创建的内容。总项目由多个可管理的项目阶段组成，每个阶段再包含具体任务。
+                  一个总项目下面可以放多个任务。只填写任务名、执行步骤和备注即可，其余由系统使用默认值。
                 </p>
                 <div className={styles.creationTypeTabs}>
                   <button
@@ -5710,7 +5628,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     }
                   >
                     <strong>新建总项目</strong>
-                    <small>建立多个项目阶段和具体任务</small>
+                    <small>总项目就是总任务标题</small>
                   </button>
                   <button
                     className={
@@ -5739,7 +5657,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     }}
                   >
                     <strong>添加具体任务</strong>
-                    <small>加入已有总项目和项目阶段</small>
+                    <small>任务名就是子任务标题</small>
                   </button>
                   <button
                     className={
@@ -5757,14 +5675,14 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     }
                   >
                     <strong>独立任务</strong>
-                    <small>不归属任何总项目或项目阶段</small>
+                    <small>放入“个人任务”总项目</small>
                   </button>
                 </div>
                 <div className={styles.customTaskForm}>
                   {customTaskDraft.projectId !== NEW_PROJECT_OPTION &&
                     customTaskDraft.projectId !== PERSONAL_PROJECT_ID && (
                   <label className={styles.customTaskWide}>
-                    <span>归属总项目</span>
+                    <span>总项目（总任务标题）</span>
                     <select
                       value={customTaskDraft.projectId}
                       onChange={(event) =>
@@ -5786,10 +5704,16 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     </select>
                   </label>
                   )}
+                  {customTaskDraft.projectId === PERSONAL_PROJECT_ID && (
+                    <label className={styles.customTaskWide}>
+                      <span>总项目（总任务标题）</span>
+                      <input value="个人任务" readOnly />
+                    </label>
+                  )}
                   {customTaskDraft.projectId === NEW_PROJECT_OPTION && (
                     <>
                       <label>
-                        <span>新项目名称 *</span>
+                        <span>总项目（总任务标题）*</span>
                         <input
                           value={customTaskDraft.newProjectName}
                           onChange={(event) =>
@@ -5801,7 +5725,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           placeholder="例如：个人内容运营"
                         />
                       </label>
-                      <label className={styles.customTaskWide}>
+                      <label className={styles.customTaskWide} hidden>
                         <span>新项目目标</span>
                         <textarea
                           value={customTaskDraft.newProjectObjective}
@@ -5814,7 +5738,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           placeholder="说明这个项目希望达成的总体结果。"
                         />
                       </label>
-                      <section className={`${styles.newProjectStructureBuilder} ${styles.customTaskWide}`}>
+                      <section className={`${styles.newProjectStructureBuilder} ${styles.customTaskWide}`} hidden>
                         <div className={styles.newProjectStructureHeader}>
                           <div>
                             <strong>项目结构</strong>
@@ -6086,10 +6010,10 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       </section>
                     </>
                   )}
-                  {customTaskDraft.projectId !== NEW_PROJECT_OPTION && (
+                  {true && (
                   <>
                   <label>
-                    <span>具体任务 *</span>
+                    <span>任务名（子任务标题）*</span>
                     <input
                       value={customTaskDraft.title}
                       onChange={(event) =>
@@ -6101,7 +6025,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       placeholder="例如：整理本周素材"
                     />
                   </label>
-                  <label className={styles.customTaskWide}>
+                  <label className={styles.customTaskWide} hidden>
                     <span>任务详情 / 要达成的结果</span>
                     <textarea
                       value={customTaskDraft.objective}
@@ -6114,7 +6038,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       placeholder="说明这项任务最终要完成什么。"
                     />
                   </label>
-                  {customTaskDraft.projectId !== PERSONAL_PROJECT_ID && <label>
+                  {customTaskDraft.projectId !== PERSONAL_PROJECT_ID && <label hidden>
                     <span>项目阶段</span>
                     <input
                       list="custom-task-milestones"
@@ -6146,7 +6070,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       选择具体任务归属的项目阶段，也可以直接输入新阶段名称。
                     </small>
                   </label>}
-                  <label>
+                  <label hidden>
                     <span>为什么做</span>
                     <input
                       value={customTaskDraft.why}
@@ -6159,7 +6083,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       placeholder="这项任务对当前目标的作用"
                     />
                   </label>
-                  <label className={styles.customTaskWide}>
+                  <label className={styles.customTaskWide} hidden>
                     <span>任务备注（可选）</span>
                     <textarea
                       value={customTaskDraft.note}
@@ -6204,6 +6128,19 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     />
                   </div>
                   <label className={styles.customTaskWide}>
+                    <span>备注（可选）</span>
+                    <textarea
+                      value={customTaskDraft.note}
+                      onChange={(event) =>
+                        setCustomTaskDraft((current) => ({
+                          ...current,
+                          note: event.target.value,
+                        }))
+                      }
+                      placeholder="其他想说的、提醒或注意事项都写在这里；没有可留空。"
+                    />
+                  </label>
+                  <label className={styles.customTaskWide} hidden>
                     <span>完成标准（用于判断整项任务，每行一条）</span>
                     <textarea
                       value={customTaskDraft.acceptanceCriteria}
@@ -6216,7 +6153,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       placeholder="留空时会自动生成一条基础完成标准"
                     />
                   </label>
-                  <label className={styles.customTaskWide}>
+                  <label className={styles.customTaskWide} hidden>
                     <span>时间安排</span>
                     <select
                       value={customTaskDraft.scheduleType}
@@ -6235,7 +6172,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       <option value="range">持续一段时间</option>
                     </select>
                   </label>
-                  {customTaskDraft.scheduleType !== "backlog" && <label>
+                  {customTaskDraft.scheduleType !== "backlog" && <label hidden>
                     <span>
                       {customTaskDraft.scheduleType === "once"
                         ? "任务日期"
@@ -6257,7 +6194,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     />
                   </label>}
                   {customTaskDraft.scheduleType !== "once" && customTaskDraft.scheduleType !== "backlog" && (
-                    <label>
+                      <label hidden>
                       <span>结束日期</span>
                       <input
                         type="date"
@@ -6272,13 +6209,14 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       />
                     </label>
                   )}
-                  {customTaskDraft.scheduleType === "once" && (
+                  {false && customTaskDraft.scheduleType === "once" && (
                     <div className={styles.scheduleHint}>
                       只在所选日期生成一次
                     </div>
                   )}
                   <p
                     className={`${styles.scheduleDescription} ${styles.customTaskWide}`}
+                    hidden
                   >
                     {customTaskDraft.scheduleType === "backlog"
                       ? "暂不进入首页和日历，之后可在项目页面直接安排日期。"
@@ -6288,7 +6226,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                         ? "一次性任务只创建一条记录。"
                         : "重复任务只保存一条规则，每个执行日期的完成情况会分别记录。"}
                   </p>
-                  <label>
+                  <label hidden>
                     <span>预计用时（分钟）</span>
                     <input
                       type="number"
@@ -6302,7 +6240,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       }
                     />
                   </label>
-                  <label>
+                  <label hidden>
                     <span>任务标签</span>
                     <select
                       value={customTaskDraft.category}
@@ -6322,7 +6260,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       )}
                     </select>
                   </label>
-                  <label>
+                  <label hidden>
                     <span>优先级</span>
                     <select
                       value={customTaskDraft.priority}
@@ -6351,29 +6289,17 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   >
                     取消
                   </button>
-                  {customTaskDraft.projectId === NEW_PROJECT_OPTION ? (
-                    <button
-                      className={styles.primaryButton}
-                      disabled={!customTaskDraft.newProjectName.trim()}
-                      onClick={createNewProjectStructure}
-                    >
-                      创建总项目
-                    </button>
-                  ) : (
-                    <button
-                      className={styles.primaryButton}
-                      disabled={
-                        !customTaskDraft.title.trim() ||
-                        (customTaskDraft.scheduleType !== "backlog" &&
-                          !customTaskDraft.startDate)
-                      }
-                      onClick={createCustomTask}
-                    >
-                      {customTaskDraft.scheduleType === "backlog"
-                        ? "创建到待安排"
-                        : "创建任务"}
-                    </button>
-                  )}
+                  <button
+                    className={styles.primaryButton}
+                    disabled={
+                      !customTaskDraft.title.trim() ||
+                      (customTaskDraft.projectId === NEW_PROJECT_OPTION &&
+                        !customTaskDraft.newProjectName.trim())
+                    }
+                    onClick={createCustomTask}
+                  >
+                    创建任务
+                  </button>
                 </div>
               </>
             )}
@@ -6492,9 +6418,103 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
         </div>
       )}
 
+      {privacyOpen && (
+        <div className={styles.modalBackdrop}>
+          <section
+            className={`${styles.modal} ${styles.privacyModal}`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="privacy-title"
+          >
+            <div className={styles.modalHeader}>
+              <div>
+                <p className={styles.eyebrow}>数据控制权</p>
+                <h2 id="privacy-title">数据与隐私</h2>
+              </div>
+              <button aria-label="关闭" onClick={() => setPrivacyOpen(false)}>
+                ×
+              </button>
+            </div>
+
+            <div className={styles.privacySummary}>
+              <article>
+                <strong>本机数据</strong>
+                <p>项目、任务和网图会自动保存在当前浏览器。源文件保存在浏览器文件库中。</p>
+              </article>
+              <article>
+                <strong>云端同步</strong>
+                <p>
+                  {syncEnabled
+                    ? "登录后，数据和源文件按你的账户隔离保存，用于电脑和手机同步。"
+                    : "当前没有启用账户同步，数据只保存在这台设备的浏览器中。"}
+                </p>
+              </article>
+            </div>
+
+            <div className={styles.privacyActions}>
+              <button
+                className={styles.quietButton}
+                onClick={() => {
+                  setPrivacyOpen(false);
+                  setExportCopied(false);
+                  setExportScope("all");
+                  setExportOpen(true);
+                }}
+              >
+                导出完整备份
+              </button>
+            </div>
+
+            {syncEnabled ? (
+              <div className={styles.cloudDeletePanel}>
+                <strong>删除云端数据</strong>
+                <p>
+                  这会删除云端项目快照、历史版本和上传文件。本机数据不会删除，刷新后可重新选择是否上传。
+                </p>
+                <label>
+                  <span>输入“删除云端数据”确认</span>
+                  <input
+                    value={cloudDeleteConfirm}
+                    onChange={(event) => setCloudDeleteConfirm(event.target.value)}
+                    placeholder="删除云端数据"
+                  />
+                </label>
+                {cloudDeleteError && <p className={styles.error}>{cloudDeleteError}</p>}
+                {cloudDeleteDone && (
+                  <p className={styles.privacySuccess} role="status">
+                    云端数据和文件已经删除，当前内容仍安全保留在本机。
+                  </p>
+                )}
+                <button
+                  className={styles.dangerButton}
+                  disabled={
+                    cloudDeleteBusy || cloudDeleteConfirm.trim() !== "删除云端数据"
+                  }
+                  onClick={deleteCloudData}
+                >
+                  {cloudDeleteBusy ? "正在删除…" : "删除全部云端数据"}
+                </button>
+              </div>
+            ) : (
+              <p className={styles.modalHint}>
+                未登录状态没有云端数据。如果需要跨设备同步，可以使用 ChatGPT 账户登录。
+              </p>
+            )}
+
+            <div className={styles.modalActions}>
+              <button className={styles.quietButton} onClick={() => setPrivacyOpen(false)}>
+                完成
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {planProject && (
         <div className={styles.drawerBackdrop}>
-          <aside className={`${styles.drawer} ${styles.planDrawer}`}>
+          <aside className={`${styles.drawer} ${styles.planDrawer} ${
+            projectEditDraft ? styles.planDrawerEditing : ""
+          }`}>
             <div className={styles.drawerHeader}>
               <span>任务总体规划</span>
               <button
@@ -6519,17 +6539,13 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               <div>
                 <button
                   className={styles.projectActionButton}
-                  disabled={Boolean(projectEditDraft)}
-                  onClick={startProjectEdit}
+                  onClick={() =>
+                    projectEditDraft
+                      ? savePlanChanges(false)
+                      : startProjectEdit()
+                  }
                 >
-                  编辑项目
-                </button>
-                <button
-                  className={styles.projectUpdateButton}
-                  disabled={!planHasUnsavedChanges}
-                  onClick={() => savePlanChanges(false)}
-                >
-                  更新项目
+                  {projectEditDraft ? "完成编辑" : "编辑项目"}
                 </button>
                 <button
                   className={styles.projectDeleteButton}
@@ -6542,6 +6558,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 </button>
               </div>
             </nav>
+            {!projectEditDraft && <>
             <section className={styles.projectPicker}>
               <div>
                 <p className={styles.eyebrow}>选择项目</p>
@@ -6575,96 +6592,107 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             <div className={styles.projectPlanHeading}>
               <h2>{planProject.name}</h2>
             </div>
+            </>}
 
             {projectEditDraft?.projectId === planProject.id ? (
-              <section className={styles.projectEditor}>
-                <label>
-                  <span>项目名称</span>
-                  <input
-                    value={projectEditDraft.name}
-                    onChange={(event) => {
-                      checkpointPlanOperation("project:name");
-                      setProjectEditDraft((current) =>
-                        current
-                          ? { ...current, name: event.target.value }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-                <label>
-                  <span>项目说明 / 总体目标</span>
-                  <textarea
-                    value={projectEditDraft.objective}
-                    onChange={(event) => {
-                      checkpointPlanOperation("project:objective");
-                      setProjectEditDraft((current) =>
-                        current
-                          ? { ...current, objective: event.target.value }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-                <label>
-                  <span>项目背景</span>
-                  <textarea
-                    value={projectEditDraft.background}
-                    onChange={(event) => {
-                      checkpointPlanOperation("project:background");
-                      setProjectEditDraft((current) =>
-                        current
-                          ? { ...current, background: event.target.value }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-                <label>
-                  <span>成功标准（每行一条）</span>
-                  <textarea
-                    value={projectEditDraft.successCriteria}
-                    onChange={(event) => {
-                      checkpointPlanOperation("project:success-criteria");
-                      setProjectEditDraft((current) =>
-                        current
-                          ? {
-                              ...current,
-                              successCriteria: event.target.value,
-                            }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-                <label>
-                  <span>限制条件（每行一条）</span>
-                  <textarea
-                    value={projectEditDraft.constraints}
-                    onChange={(event) => {
-                      checkpointPlanOperation("project:constraints");
-                      setProjectEditDraft((current) =>
-                        current
-                          ? { ...current, constraints: event.target.value }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
-                <label>
-                  <span>当前假设（每行一条）</span>
-                  <textarea
-                    value={projectEditDraft.assumptions}
-                    onChange={(event) => {
-                      checkpointPlanOperation("project:assumptions");
-                      setProjectEditDraft((current) =>
-                        current
-                          ? { ...current, assumptions: event.target.value }
-                          : current,
-                      );
-                    }}
-                  />
-                </label>
+              <section className={styles.projectEditor} data-project-edit-surface>
+                <header className={styles.projectEditorHeader}>
+                  <div>
+                    <p className={styles.eyebrow}>编辑项目</p>
+                    <h3>先明确目标，再补充判断依据</h3>
+                  </div>
+                  <small>修改内容会与下方任务规划一起保存</small>
+                </header>
+                <section className={styles.projectEditorGroup}>
+                  <div className={styles.projectEditorGroupHeading}>
+                    <span>01</span>
+                    <div><strong>基本信息</strong><small>项目叫什么，最终要做到什么</small></div>
+                  </div>
+                  <label>
+                    <span>项目名称</span>
+                    <input
+                      value={projectEditDraft.name}
+                      onChange={(event) => {
+                        checkpointPlanOperation("project:name");
+                        setProjectEditDraft((current) =>
+                          current ? { ...current, name: event.target.value } : current,
+                        );
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>项目说明 / 总体目标</span>
+                    <textarea
+                      value={projectEditDraft.objective}
+                      onChange={(event) => {
+                        checkpointPlanOperation("project:objective");
+                        setProjectEditDraft((current) =>
+                          current ? { ...current, objective: event.target.value } : current,
+                        );
+                      }}
+                    />
+                  </label>
+                </section>
+                <section className={styles.projectEditorGroup}>
+                  <div className={styles.projectEditorGroupHeading}>
+                    <span>02</span>
+                    <div><strong>背景与判断</strong><small>为什么现在做，以及目前基于什么判断</small></div>
+                  </div>
+                  <label>
+                    <span>项目背景</span>
+                    <textarea
+                      value={projectEditDraft.background}
+                      onChange={(event) => {
+                        checkpointPlanOperation("project:background");
+                        setProjectEditDraft((current) =>
+                          current ? { ...current, background: event.target.value } : current,
+                        );
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>当前假设（每行一条）</span>
+                    <textarea
+                      value={projectEditDraft.assumptions}
+                      onChange={(event) => {
+                        checkpointPlanOperation("project:assumptions");
+                        setProjectEditDraft((current) =>
+                          current ? { ...current, assumptions: event.target.value } : current,
+                        );
+                      }}
+                    />
+                  </label>
+                </section>
+                <section className={styles.projectEditorGroup}>
+                  <div className={styles.projectEditorGroupHeading}>
+                    <span>03</span>
+                    <div><strong>执行标准</strong><small>怎样算完成，执行时有哪些边界</small></div>
+                  </div>
+                  <label>
+                    <span>成功标准（每行一条）</span>
+                    <textarea
+                      value={projectEditDraft.successCriteria}
+                      onChange={(event) => {
+                        checkpointPlanOperation("project:success-criteria");
+                        setProjectEditDraft((current) =>
+                          current ? { ...current, successCriteria: event.target.value } : current,
+                        );
+                      }}
+                    />
+                  </label>
+                  <label>
+                    <span>限制条件（每行一条）</span>
+                    <textarea
+                      value={projectEditDraft.constraints}
+                      onChange={(event) => {
+                        checkpointPlanOperation("project:constraints");
+                        setProjectEditDraft((current) =>
+                          current ? { ...current, constraints: event.target.value } : current,
+                        );
+                      }}
+                    />
+                  </label>
+                </section>
               </section>
             ) : (
               <>
@@ -6709,7 +6737,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             )}
 
             {projectEditDraft ? (
-              <section className={styles.projectCategoryPanel}>
+              <section className={styles.projectCategoryPanel} data-project-edit-surface>
                 <div className={styles.projectCategoryHeader}>
                   <div>
                     <p className={styles.eyebrow}>任务标签</p>
@@ -6753,7 +6781,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </section>
             ) : null}
 
-            <section className={styles.projectTaskPlanner}>
+            <section className={styles.projectTaskPlanner} data-project-edit-surface>
               <fieldset
                 className={styles.projectEditFieldset}
                 disabled={!projectEditDraft}
@@ -7007,30 +7035,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                             </button>
                           )}
                         </summary>
-                        <div className={styles.projectTaskFields}>
-                        <label className={styles.projectTaskWide}>
-                          <span>任务标题</span>
-                          <input
-                            value={task.title}
-                            onChange={(event) =>
-                              updateProjectTaskDraft(task.id, {
-                                title: event.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                        <label className={styles.projectTaskWide}>
-                          <span>任务详情 / 要达成的结果</span>
-                          <textarea
-                            value={task.objective}
-                            onChange={(event) =>
-                              updateProjectTaskDraft(task.id, {
-                                objective: event.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                        <label>
+                        <div className={`${styles.projectTaskFields} ${styles.taskEditorTemplate}`}>
+                        <label className={`${styles.projectTaskWide} ${styles.numberedTaskField}`} data-field-number="01">
                           <span>项目阶段</span>
                           <select
                             aria-label={`选择“${task.title}”的项目阶段`}
@@ -7071,18 +7077,67 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                             可选择已有阶段，也可以直接输入新阶段名称。
                           </small>
                         </label>
-                        <label>
-                          <span>预计时长（分钟）</span>
+                        <label className={`${styles.projectTaskWide} ${styles.numberedTaskField}`} data-field-number="02">
+                          <span>任务标题</span>
                           <input
-                            type="number"
-                            min="1"
-                            value={task.estimated_minutes || ""}
+                            value={task.title}
                             onChange={(event) =>
                               updateProjectTaskDraft(task.id, {
-                                estimated_minutes:
-                                  Number(event.target.value) || null,
+                                title: event.target.value,
                               })
                             }
+                          />
+                        </label>
+                        <div className={`${styles.projectTaskWide} ${styles.numberedTaskField}`} data-field-number="03">
+                          <EditableSteps
+                            steps={task.steps || []}
+                            onAdd={() =>
+                              updateProjectTaskDraft(task.id, {
+                                steps: [...(task.steps || []), ""],
+                                step_results: [...(task.step_results || []), false],
+                                step_reports: [...(task.step_reports || []), ""],
+                              })
+                            }
+                            onChange={(index, value) =>
+                              updateProjectTaskDraft(task.id, {
+                                steps: (task.steps || []).map((step, stepIndex) =>
+                                  stepIndex === index ? value : step,
+                                ),
+                              })
+                            }
+                            onRemove={(index) =>
+                              updateProjectTaskDraft(task.id, {
+                                steps: (task.steps || []).filter((_, stepIndex) => stepIndex !== index),
+                                step_results: (task.step_results || []).filter((_, stepIndex) => stepIndex !== index),
+                                step_reports: (task.step_reports || []).filter((_, stepIndex) => stepIndex !== index),
+                              })
+                            }
+                            onMove={(index, direction) =>
+                              updateProjectTaskDraft(task.id, {
+                                steps: moveArrayItem(task.steps || [], index, index + direction),
+                                step_results: moveArrayItem(task.step_results || [], index, index + direction),
+                                step_reports: moveArrayItem(task.step_reports || [], index, index + direction),
+                              })
+                            }
+                          />
+                        </div>
+                        <label className={`${styles.projectTaskWide} ${styles.numberedTaskField}`} data-field-number="04">
+                          <span>完成标准（每行一条）</span>
+                          <textarea
+                            value={task.acceptance_criteria.join("\n")}
+                            onChange={(event) => {
+                              const criteria = event.target.value
+                                .split("\n")
+                                .map((item) => item.trim())
+                                .filter(Boolean);
+                              updateProjectTaskDraft(task.id, {
+                                acceptance_criteria: criteria,
+                                criterion_results: criteria.map(
+                                  (_, itemIndex) =>
+                                    task.criterion_results?.[itemIndex] || false,
+                                ),
+                              });
+                            }}
                           />
                         </label>
                         <label>
@@ -7134,6 +7189,20 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           </label>
                         )}
                         <label>
+                          <span>预计时长（分钟）</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={task.estimated_minutes || ""}
+                            onChange={(event) =>
+                              updateProjectTaskDraft(task.id, {
+                                estimated_minutes:
+                                  Number(event.target.value) || null,
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
                           <span>任务标签</span>
                           <select
                             value={taskCategory(task)}
@@ -7173,17 +7242,6 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           </select>
                         </label>
                         <label className={styles.projectTaskWide}>
-                          <span>为什么做</span>
-                          <textarea
-                            value={task.why || ""}
-                            onChange={(event) =>
-                              updateProjectTaskDraft(task.id, {
-                                why: event.target.value,
-                              })
-                            }
-                          />
-                        </label>
-                        <label className={styles.projectTaskWide}>
                           <span>任务备注（可选）</span>
                           <textarea
                             value={task.note || ""}
@@ -7193,52 +7251,6 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                               })
                             }
                             placeholder="补充提醒、注意事项或执行时需要记住的信息。"
-                          />
-                        </label>
-                        <label className={styles.projectTaskWide}>
-                          <span>执行步骤（仅用于查看流程，每行一条）</span>
-                          <textarea
-                            value={(task.steps || []).join("\n")}
-                            onChange={(event) => {
-                              const steps = event.target.value
-                                .split("\n")
-                                .map((item) => item.trim())
-                                .filter(Boolean);
-                              updateProjectTaskDraft(task.id, {
-                                steps,
-                                step_results: steps.map(
-                                  (_, itemIndex) =>
-                                    task.step_results?.[itemIndex] ||
-                                    false,
-                                ),
-                                step_reports: steps.map(
-                                  (_, itemIndex) =>
-                                    task.step_reports?.[itemIndex] ||
-                                    "",
-                                ),
-                              });
-                            }}
-                          />
-                        </label>
-                        <label className={styles.projectTaskWide}>
-                          <span>完成标准（用于判断整项任务，每行一条）</span>
-                          <textarea
-                            value={task.acceptance_criteria.join("\n")}
-                            onChange={(event) => {
-                              const criteria = event.target.value
-                                .split("\n")
-                                .map((item) => item.trim())
-                                .filter(Boolean);
-                              updateProjectTaskDraft(task.id, {
-                                acceptance_criteria: criteria,
-                                criterion_results: criteria.map(
-                                  (_, itemIndex) =>
-                                    task.criterion_results?.[
-                                      itemIndex
-                                    ] || false,
-                                ),
-                              });
-                            }}
                           />
                         </label>
                         </div>
@@ -7272,47 +7284,9 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </fieldset>
             </section>
 
-            <section className={styles.homepageTipEditor}>
+            <section className={styles.improvementPanel} data-project-edit-surface>
               <div className={styles.planModuleHeader}>
                 <span className={styles.planModuleNumber}>02</span>
-                <div>
-                <p className={styles.eyebrow}>主页执行提示</p>
-                <h3>修改首页黑色卡片显示的内容</h3>
-                <small>控制每天打开首页时最先看到的提醒</small>
-                </div>
-              </div>
-              <label>
-                <span>提示标题</span>
-                <input
-                  disabled={!projectEditDraft}
-                  value={executionTipTitleDraft}
-                  onChange={(event) => {
-                    checkpointPlanOperation("tips:title");
-                    setExecutionTipTitleDraft(event.target.value);
-                  }}
-                  placeholder={DEFAULT_EXECUTION_TIP_TITLE}
-                />
-              </label>
-              <label>
-                <span>提示条目（每行一条）</span>
-                <textarea
-                  disabled={!projectEditDraft}
-                  value={executionTipsDraft}
-                  onChange={(event) => {
-                    checkpointPlanOperation("tips:items");
-                    setExecutionTipsDraft(event.target.value);
-                  }}
-                  placeholder={DEFAULT_EXECUTION_TIPS.join("\n")}
-                />
-              </label>
-              <small>
-                导入项目时可由 PotatoFlow Skill 自动填写，之后也可以在这里修改。
-              </small>
-            </section>
-
-            <section className={styles.improvementPanel}>
-              <div className={styles.planModuleHeader}>
-                <span className={styles.planModuleNumber}>03</span>
                 <div>
                 <p className={styles.eyebrow}>执行提升</p>
                 <h3>根据实际执行持续修正规划</h3>
@@ -7330,10 +7304,10 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               />
             </section>
 
-            <section className={styles.sourceFilesPanel}>
+            {!projectEditDraft && <section className={styles.sourceFilesPanel}>
               <div className={styles.sourceFilesHeader}>
                 <div className={styles.planModuleHeader}>
-                  <span className={styles.planModuleNumber}>04</span>
+                  <span className={styles.planModuleNumber}>03</span>
                   <div>
                   <p className={styles.eyebrow}>原文件索引</p>
                   <h3>项目依据与原始资料</h3>
@@ -7344,29 +7318,22 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   <label>
                     <span>上传后关联到</span>
                     <select
-                      aria-label="新原文件关联任务"
-                      value={
-                        projectTaskDrafts.length === 0
-                          ? "__none__"
-                          : sourceUploadTarget
-                      }
-                      disabled={fileBusy || projectTaskDrafts.length === 0}
+                      aria-label="新原文件关联层级"
+                      value={sourceUploadTarget}
+                      disabled={fileBusy}
                       onChange={(event) =>
                         setSourceUploadTarget(event.target.value)
                       }
                     >
-                      {projectTaskDrafts.length === 0 ? (
-                        <option value="__none__">仅加入项目索引</option>
-                      ) : (
-                        <>
-                          <option value="__all__">全部任务共用</option>
-                          {projectTaskDrafts.map((task) => (
-                            <option key={task.id} value={task.id}>
-                              仅：{task.title}
-                            </option>
-                          ))}
-                        </>
-                      )}
+                      <option value="__all__">本项目</option>
+                      {visibleMilestones.map((milestone, index) => (
+                        <option
+                          key={milestone}
+                          value={milestoneSourceTarget(milestone)}
+                        >
+                          阶段 {String(index + 1).padStart(2, "0")}：{milestone}
+                        </option>
+                      ))}
                     </select>
                   </label>
                   <label className={styles.fileUploadButton}>
@@ -7395,6 +7362,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                     const assignment = sourceAssignmentValue(
                       file.id,
                       projectTaskDrafts,
+                      visibleMilestones,
                     );
                     return (
                       <div className={styles.sourceFileRow} key={file.id}>
@@ -7411,13 +7379,11 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                           <small>{fileSizeLabel(file.size)} · 点击查看</small>
                         </button>
                         <label>
-                          <span>关联任务</span>
+                          <span>关联范围</span>
                           <select
-                            aria-label={`设置 ${file.name} 的任务关联`}
+                            aria-label={`设置 ${file.name} 的项目阶段关联`}
                             value={assignment}
-                            disabled={
-                              fileBusy || projectTaskDrafts.length === 0
-                            }
+                            disabled={fileBusy}
                             onChange={(event) =>
                               assignSourceFile(
                                 planProject.id,
@@ -7426,16 +7392,20 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                               )
                             }
                           >
-                            <option value="__none__">暂不关联任务</option>
-                            <option value="__all__">全部任务共用</option>
-                            {assignment === "__multiple__" && (
-                              <option value="__multiple__">
-                                已关联多个指定任务
+                            <option value="__all__">本项目</option>
+                            {(assignment === "__none__" || assignment === "__multiple__") && (
+                              <option value={assignment} disabled>
+                                {assignment === "__none__"
+                                  ? "尚未设置关联层级"
+                                  : "原有文件关联跨越多个阶段"}
                               </option>
                             )}
-                            {projectTaskDrafts.map((task) => (
-                              <option key={task.id} value={task.id}>
-                                仅：{task.title}
+                            {visibleMilestones.map((milestone, index) => (
+                              <option
+                                key={milestone}
+                                value={milestoneSourceTarget(milestone)}
+                              >
+                                阶段 {String(index + 1).padStart(2, "0")}：{milestone}
                               </option>
                             ))}
                           </select>
@@ -7445,7 +7415,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   })
                 )}
               </div>
-            </section>
+            </section>}
             <footer className={styles.planFooter}>
               <button
                 className={styles.primaryButton}
@@ -7667,7 +7637,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             <p className={styles.eyebrow}>确认退出项目总览</p>
             <h2 id="save-plan-changes-title">保存本次项目修改吗？</h2>
             <p>
-              将统一保存项目内容、主页执行提示和执行提升；原文件上传后已单独保存在当前浏览器。
+              将统一保存项目内容和执行提升；原文件上传后已单独保存在当前浏览器。
             </p>
             <div className={styles.confirmActions}>
               <button
@@ -7876,7 +7846,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   aria-pressed={taskDefinitionEditing}
                   onClick={() => setTaskDefinitionEditing((current) => !current)}
                 >
-                  {taskDefinitionEditing ? "收起编辑" : "编辑任务"}
+                  {taskDefinitionEditing ? "完成编辑" : "编辑任务"}
                 </button>
                 <button aria-label="关闭任务详情" onClick={requestCloseTask}>×</button>
               </div>
@@ -7890,16 +7860,8 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   </div>
                   <span>所有修改在退出时统一保存</span>
                 </div>
-                <div className={styles.customTaskForm}>
-                  <label>
-                    <span>任务标题</span>
-                    <input
-                      aria-label="编辑任务标题"
-                      value={selectedTask.title}
-                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, title: event.target.value } : task)}
-                    />
-                  </label>
-                  <label>
+                <div className={`${styles.customTaskForm} ${styles.taskEditorTemplate}`}>
+                  <label className={styles.numberedTaskField} data-field-number="01">
                     <span>项目阶段</span>
                     <select
                       aria-label="选择项目阶段"
@@ -7945,23 +7907,15 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       选择同一总项目中的已有阶段，或直接输入新阶段名称。保存后任务会归入对应阶段。
                     </small>
                   </label>
-                  <label className={styles.customTaskWide}>
-                    <span>任务详情 / 要达成的结果</span>
-                    <textarea
-                      aria-label="编辑任务详情"
-                      value={selectedTask.objective}
-                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, objective: event.target.value } : task)}
+                  <label className={styles.numberedTaskField} data-field-number="02">
+                    <span>任务标题</span>
+                    <input
+                      aria-label="编辑任务标题"
+                      value={selectedTask.title}
+                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, title: event.target.value } : task)}
                     />
                   </label>
-                  <label className={styles.customTaskWide}>
-                    <span>为什么做</span>
-                    <textarea
-                      aria-label="编辑为什么做"
-                      value={selectedTask.why || ""}
-                      onChange={(event) => setExecutionDraft((task) => task ? { ...task, why: event.target.value } : task)}
-                    />
-                  </label>
-                  <div className={styles.customTaskWide}>
+                  <div className={`${styles.customTaskWide} ${styles.numberedTaskField}`} data-field-number="03">
                     <EditableSteps
                       steps={selectedTask.steps || []}
                       onAdd={() => updateDraftStepDefinition({ type: "add" })}
@@ -7970,7 +7924,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       onMove={(index, direction) => updateDraftStepDefinition({ type: "move", index, direction })}
                     />
                   </div>
-                  <label className={styles.customTaskWide}>
+                  <label className={`${styles.customTaskWide} ${styles.numberedTaskField}`} data-field-number="04">
                     <span>完成标准（每行一条）</span>
                     <textarea
                       aria-label="编辑完成标准"
@@ -8046,6 +8000,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 </div>
               </section>
             )}
+            {!taskDefinitionEditing && <>
             <p className={styles.eyebrow}>
               {selectedTask.milestone || "未设置项目阶段"}
             </p>
@@ -8086,8 +8041,6 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </button>
               <h2>{selectedTask.title}</h2>
             </div>
-            <p className={styles.taskObjective}>{selectedTask.objective}</p>
-
             <div className={styles.detailMeta}>
               <span>
                 {selectedTaskProgress === 100
@@ -8160,7 +8113,11 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 aria-valuemax={100}
                 aria-valuenow={selectedTaskProgress}
               >
-                <i style={{ width: `${selectedTaskProgress}%` }} />
+                <i
+                  style={{
+                    transform: `scaleX(${selectedTaskProgress / 100})`,
+                  }}
+                />
               </div>
               {selectedTaskProgress === 100 && (
                 <div className={styles.crownReward}>
@@ -8252,45 +8209,23 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </div>
             </section>
 
-            <section className={styles.taskSourceFilesPanel} data-task-section="files">
-              <div>
-                <p className={styles.eyebrow}>相关源文件</p>
-                <h3>执行这条任务时需要查看的资料</h3>
-              </div>
-              {selectedTaskSourceFiles.length ? (
-                <div className={styles.sourceFileList}>
-                  {selectedTaskSourceFiles.map((file) => (
-                    <button
-                      key={file.id}
-                      disabled={fileBusy}
-                      onClick={() => openSourceFile(file)}
-                    >
-                      <span>
-                        {file.name.split(".").pop()?.toUpperCase() || "FILE"}
-                      </span>
-                      <strong>{file.name}</strong>
-                      <small>{fileSizeLabel(file.size)} · 点击查看</small>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <p className={styles.taskSourceEmpty}>
-                  这条任务还没有关联源文件。可在项目总览中添加，或重新导入时选择关联方式。
-                </p>
-              )}
-            </section>
-
             <DetailBlock
               number="01"
-              label="决策依据"
-              title="为什么做"
+              title="项目阶段"
               variant="reason"
             >
-              <p>{selectedTask.why || "项目中还没有记录原因。"}</p>
+              <p>{selectedTask.milestone || "未设置项目阶段"}</p>
             </DetailBlock>
             <DetailBlock
               number="02"
-              label="行动路径"
+              title="任务标题"
+              variant="criteria"
+            >
+              <p>{selectedTask.title}</p>
+            </DetailBlock>
+
+            <DetailBlock
+              number="03"
               title="执行步骤"
               variant="steps"
               sectionKey="steps"
@@ -8365,8 +8300,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               )}
             </DetailBlock>
             <DetailBlock
-              number="03"
-              label="验收清单"
+              number="04"
               title="完成标准"
               variant="criteria"
             >
@@ -8378,6 +8312,34 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 ))}
               </ul>
             </DetailBlock>
+
+            <section className={styles.taskSourceFilesPanel} data-task-section="files">
+              <div>
+                <p className={styles.eyebrow}>相关源文件</p>
+                <h3>执行这条任务时需要查看的资料</h3>
+              </div>
+              {selectedTaskSourceFiles.length ? (
+                <div className={styles.sourceFileList}>
+                  {selectedTaskSourceFiles.map((file) => (
+                    <button
+                      key={file.id}
+                      disabled={fileBusy}
+                      onClick={() => openSourceFile(file)}
+                    >
+                      <span>
+                        {file.name.split(".").pop()?.toUpperCase() || "FILE"}
+                      </span>
+                      <strong>{file.name}</strong>
+                      <small>{fileSizeLabel(file.size)} · 点击查看</small>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className={styles.taskSourceEmpty}>
+                  这条任务还没有关联源文件。可在项目总览中添加，或重新导入时选择关联方式。
+                </p>
+              )}
+            </section>
 
             <section className={styles.taskReportPanel} data-task-section="report">
               <div>
@@ -8473,6 +8435,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                   : "保存并退出"}
               </button>
             </div>
+            </>}
           </aside>
         </div>
       )}
@@ -8488,7 +8451,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
             <p className={styles.eyebrow}>发现未保存修改</p>
             <h2 id="save-changes-title">保存本次任务修改吗？</h2>
             <p>
-              将保存步骤完成状态、步骤备注、统一结果汇报、任务备注、标签与优先级；问题记录未填写时会自动跳过。
+              将保存步骤完成状态、步骤备注、任务汇报、任务备注和问题记录。
             </p>
             <div className={styles.confirmActions}>
               <button
@@ -8745,7 +8708,7 @@ function GettingStarted({
           <b>02</b>
           <div>
             <strong>回答问题并确认规划</strong>
-            <span>确认目标、成功标准、时间和任务节奏。</span>
+            <span>自然说明想做什么、目前情况和安排偏好，由 AI 帮你归纳成任务。</span>
           </div>
         </li>
         <li>
@@ -9041,14 +9004,12 @@ function EditableSteps({
 
 function DetailBlock({
   number,
-  label,
   title,
   variant,
   sectionKey,
   children,
 }: {
   number: string;
-  label: string;
   title: string;
   variant: "reason" | "steps" | "criteria";
   sectionKey?: string;
@@ -9066,7 +9027,6 @@ function DetailBlock({
       <div className={styles.detailBlockHeader}>
         <span className={styles.detailIndex}>{number}</span>
         <div>
-          <small>{label}</small>
           <h3>{title}</h3>
         </div>
       </div>
