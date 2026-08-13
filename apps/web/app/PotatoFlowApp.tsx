@@ -17,6 +17,7 @@ import { isPotatoFlowStore } from "./store-snapshot-validation";
 import styles from "./potatoflow.module.css";
 
 const LogicGraphPrototype = lazy(() => import("./LogicGraphPrototype"));
+const MOTION_PREFERENCE_KEY = "potatoflow:motion-preference";
 
 type ProjectInput = {
   id?: string;
@@ -1272,6 +1273,9 @@ export default function PotatoFlowApp({
 }) {
   const [store, setStore] = useState<Store>(EMPTY_STORE);
   const [hydrated, setHydrated] = useState(false);
+  const [motionPreference, setMotionPreference] = useState<
+    "standard" | "reduced"
+  >("standard");
   const [activeTab, setActiveTab] = useState<TabId>("today");
   const [requestedLogicGraphPageId, setRequestedLogicGraphPageId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(localDate());
@@ -1453,8 +1457,17 @@ export default function PotatoFlowApp({
     const stored = readStoredData();
     // Hydrate once from the browser-owned local store after SSR has finished.
     if (stored) setStore(stored);
+    const storedMotion = localStorage.getItem(MOTION_PREFERENCE_KEY);
+    if (storedMotion === "standard" || storedMotion === "reduced") {
+      setMotionPreference(storedMotion);
+    }
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem(MOTION_PREFERENCE_KEY, motionPreference);
+  }, [hydrated, motionPreference]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -4488,7 +4501,13 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
   }
 
   return (
-    <div className={styles.shell}>
+    <div
+      className={`${styles.shell} ${
+        motionPreference === "standard"
+          ? styles.motionStandard
+          : styles.motionReduced
+      }`}
+    >
       <aside className={styles.sidebar}>
         <div className={styles.brand}>
           <span className={styles.brandMark}>PF</span>
@@ -4579,6 +4598,19 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
               </button>
               </div>
             ) : null}
+            <button
+              className={`${styles.quietButton} ${styles.motionToggle}`}
+              type="button"
+              aria-pressed={motionPreference === "reduced"}
+              title="切换网页动效强度"
+              onClick={() =>
+                setMotionPreference((current) =>
+                  current === "standard" ? "reduced" : "standard",
+                )
+              }
+            >
+              动效：{motionPreference === "standard" ? "标准" : "减少"}
+            </button>
             <button
               className={`${styles.quietButton} ${styles.privacyButton}`}
               onClick={() => {

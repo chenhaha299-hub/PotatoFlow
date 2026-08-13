@@ -211,6 +211,19 @@
   white-space: nowrap;
 }
 
+.motionToggle {
+  min-height: 40px;
+  border-color: #b8cfbe;
+  color: var(--green);
+  white-space: nowrap;
+}
+
+.motionToggle[aria-pressed="true"] {
+  border-color: var(--line-strong);
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
 .primaryButton,
 .quietButton {
   display: inline-flex;
@@ -8178,50 +8191,58 @@
   }
 }
 
+.motionReduced *,
+.motionReduced *::before,
+.motionReduced *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+
+.motionReduced .modalBackdrop,
+.motionReduced .drawerBackdrop,
+.motionReduced .modal,
+.motionReduced .drawer,
+.motionReduced .confirmDialog,
+.motionReduced .logicOverlay,
+.motionReduced .logicDialog,
+.motionReduced .logicNodeFresh,
+.motionReduced .logicEdgeFresh line:not(.logicEdgeHitbox),
+.motionReduced .logicCanvasDive,
+.motionReduced .logicCanvasBack,
+.motionReduced .logicCanvasArrive,
+.motionReduced .taskList,
+.motionReduced .projectMilestoneTasks,
+.motionReduced .crownReward,
+.motionReduced .crownSparkle {
+  animation: none !important;
+}
+
+.motionReduced .progressTrack i,
+.motionReduced .taskProgressBar i,
+.motionReduced .taskProgressTrack i,
+.motionReduced .projectContextDetails > summary b,
+.motionReduced .taskGroupCollapseButton span,
+.motionReduced .milestoneCollapseButton span {
+  transition-duration: 0ms !important;
+}
+
+.motionReduced .contextPanelInteractive:hover,
+.motionReduced .dayAgendaTask:hover,
+.motionReduced .projectCard:hover,
+.motionReduced .syncComparison > button:hover:not(:disabled),
+.motionReduced .logicPageCard:hover,
+.motionReduced .logicPageCard:hover .logicPageArrow {
+  transform: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  .shell:not(.motionStandard) *,
+  .shell:not(.motionStandard) *::before,
+  .shell:not(.motionStandard) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-  }
-
-  .modalBackdrop,
-  .drawerBackdrop,
-  .modal,
-  .drawer,
-  .confirmDialog,
-  .logicOverlay,
-  .logicDialog,
-  .logicNodeFresh,
-  .logicEdgeFresh line:not(.logicEdgeHitbox),
-  .logicCanvasDive,
-  .logicCanvasBack,
-  .logicCanvasArrive,
-  .taskList,
-  .projectMilestoneTasks,
-  .crownReward,
-  .crownSparkle {
-    animation: none !important;
-  }
-
-  .progressTrack i,
-  .taskProgressBar i,
-  .taskProgressTrack i,
-  .projectContextDetails > summary b,
-  .taskGroupCollapseButton span,
-  .milestoneCollapseButton span {
-    transition-duration: 0ms !important;
-  }
-
-  .contextPanelInteractive:hover,
-  .dayAgendaTask:hover,
-  .projectCard:hover,
-  .syncComparison > button:hover:not(:disabled),
-  .logicPageCard:hover,
-  .logicPageCard:hover .logicPageArrow {
-    transform: none !important;
   }
 }
   .projectPicker {
