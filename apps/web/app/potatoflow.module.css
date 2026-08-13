@@ -211,19 +211,6 @@
   white-space: nowrap;
 }
 
-.motionToggle {
-  min-height: 40px;
-  border-color: #b8cfbe;
-  color: var(--green);
-  white-space: nowrap;
-}
-
-.motionToggle[aria-pressed="true"] {
-  border-color: var(--line-strong);
-  background: var(--surface-soft);
-  color: var(--muted);
-}
-
 /* Every enabled button acknowledges a press with the same short response. */
 .motionStandard button:not(:disabled) {
   transition-property:
@@ -239,10 +226,6 @@
 
 .motionStandard button:not(:disabled):active {
   transform: scale(0.97);
-}
-
-.motionReduced button:not(:disabled):active {
-  transform: none !important;
 }
 
 .primaryButton,
@@ -8212,60 +8195,6 @@
   }
 }
 
-.motionReduced *,
-.motionReduced *::before,
-.motionReduced *::after {
-  animation-duration: 0.01ms !important;
-  animation-iteration-count: 1 !important;
-  scroll-behavior: auto !important;
-}
-
-.motionReduced .modalBackdrop,
-.motionReduced .drawerBackdrop,
-.motionReduced .modal,
-.motionReduced .drawer,
-.motionReduced .confirmDialog,
-.motionReduced .logicOverlay,
-.motionReduced .logicDialog,
-.motionReduced .logicNodeFresh,
-.motionReduced .logicEdgeFresh line:not(.logicEdgeHitbox),
-.motionReduced .logicCanvasDive,
-.motionReduced .logicCanvasBack,
-.motionReduced .logicCanvasArrive,
-.motionReduced .taskList,
-.motionReduced .projectMilestoneTasks,
-.motionReduced .crownReward,
-.motionReduced .crownSparkle {
-  animation: none !important;
-}
-
-.motionReduced .progressTrack i,
-.motionReduced .taskProgressBar i,
-.motionReduced .taskProgressTrack i,
-.motionReduced .projectContextDetails > summary b,
-.motionReduced .taskGroupCollapseButton span,
-.motionReduced .milestoneCollapseButton span {
-  transition-duration: 0ms !important;
-}
-
-.motionReduced .contextPanelInteractive:hover,
-.motionReduced .dayAgendaTask:hover,
-.motionReduced .projectCard:hover,
-.motionReduced .syncComparison > button:hover:not(:disabled),
-.motionReduced .logicPageCard:hover,
-.motionReduced .logicPageCard:hover .logicPageArrow {
-  transform: none !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .shell:not(.motionStandard) *,
-  .shell:not(.motionStandard) *::before,
-  .shell:not(.motionStandard) *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-  }
-}
   .projectPicker {
     grid-template-columns: 1fr;
     gap: 10px;
