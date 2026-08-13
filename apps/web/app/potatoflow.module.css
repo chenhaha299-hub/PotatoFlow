@@ -224,6 +224,27 @@
   color: var(--muted);
 }
 
+/* Every enabled button acknowledges a press with the same short response. */
+.motionStandard button:not(:disabled) {
+  transition-property:
+    transform,
+    background-color,
+    border-color,
+    color,
+    box-shadow,
+    opacity;
+  transition-duration: var(--motion-fast);
+  transition-timing-function: var(--ease-out);
+}
+
+.motionStandard button:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+.motionReduced button:not(:disabled):active {
+  transform: none !important;
+}
+
 .primaryButton,
 .quietButton {
   display: inline-flex;
