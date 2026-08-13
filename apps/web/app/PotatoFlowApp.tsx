@@ -4971,7 +4971,7 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                       <div className={styles.progressTrack}>
                         <i
                           style={{
-                            width: `${progress}%`,
+                            transform: `scaleX(${progress / 100})`,
                           }}
                         />
                       </div>
@@ -8113,7 +8113,11 @@ ${selectedIssue.attempts?.length ? selectedIssue.attempts.map((attempt) => `- ${
                 aria-valuemax={100}
                 aria-valuenow={selectedTaskProgress}
               >
-                <i style={{ width: `${selectedTaskProgress}%` }} />
+                <i
+                  style={{
+                    transform: `scaleX(${selectedTaskProgress / 100})`,
+                  }}
+                />
               </div>
               {selectedTaskProgress === 100 && (
                 <div className={styles.crownReward}>

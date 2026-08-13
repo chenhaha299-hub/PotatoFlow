@@ -68,15 +68,18 @@
   padding: 0 12px;
   text-align: left;
   transition:
-    background 160ms ease,
-    color 160ms ease,
-    transform 160ms ease;
+    background var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .nav button:hover {
   background: var(--paper);
   color: var(--ink);
-  transform: translateX(2px);
+}
+
+.nav button:active {
+  transform: scale(0.97);
 }
 
 .nav button > span {
@@ -409,12 +412,13 @@
 .contextPanelInteractive {
   cursor: pointer;
   transition:
-    transform 160ms ease,
-    box-shadow 160ms ease;
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .contextPanelInteractive:hover {
-  transform: translateY(-2px);
+  border-color: var(--line-strong);
   box-shadow: 0 22px 46px rgba(20, 30, 23, 0.22);
 }
 
@@ -781,7 +785,7 @@
 .taskGroupCollapseButton span {
   font-size: 13px;
   line-height: 1;
-  transition: transform 160ms ease;
+  transition: transform var(--motion-fast) var(--ease-out);
 }
 
 .taskGroupCollapseButtonCollapsed span {
@@ -897,6 +901,7 @@
   display: grid;
   gap: 1px;
   background: #e9ece7;
+  animation: contentReveal var(--motion-normal) var(--ease-out) both;
 }
 
 .taskCard {
@@ -909,14 +914,17 @@
   background: var(--panel);
   padding: 12px 14px;
   transition:
-    transform 160ms ease,
-    box-shadow 160ms ease;
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .taskCard:hover {
   z-index: 1;
   box-shadow: 0 8px 24px rgba(26, 39, 30, 0.09);
-  transform: translateX(2px);
+}
+
+.taskCard:active {
+  background: #f7faf7;
 }
 
 .checkButton {
@@ -1053,7 +1061,7 @@
   height: 100%;
   border-radius: inherit;
   background: #d5a53f;
-  transition: width 180ms ease;
+  transition: width var(--motion-normal) var(--ease-out);
 }
 
 .taskDone .taskProgressBar i {
@@ -1302,16 +1310,15 @@
   color: var(--ink);
   text-align: left;
   transition:
-    border-color 160ms ease,
-    transform 160ms ease,
-    box-shadow 160ms ease;
+    border-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .dayAgendaTask:hover,
 .dayAgendaTask:focus-within {
   border-color: #a8c7b3;
   box-shadow: 0 10px 28px rgba(24, 38, 29, 0.08);
-  transform: translateY(-1px);
 }
 
 .dayAgendaTaskOpen {
@@ -1616,16 +1623,15 @@
   padding: 24px;
   box-shadow: var(--shadow);
   transition:
-    border-color 160ms ease,
-    transform 160ms ease,
-    box-shadow 160ms ease;
+    border-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .projectCard:hover {
   border-color: #a9c5b1;
   outline: none;
   box-shadow: 0 18px 42px rgba(24, 38, 29, 0.1);
-  transform: translateY(-2px);
 }
 
 .projectOpenButton {
@@ -1678,9 +1684,12 @@
 
 .progressTrack i {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: var(--green);
+  transform-origin: left center;
+  transition: transform var(--motion-normal) var(--ease-out);
 }
 
 .projectTasks {
@@ -1964,6 +1973,7 @@
   display: grid;
   background: rgba(20, 24, 20, 0.42);
   backdrop-filter: blur(6px);
+  animation: backdropEnter var(--motion-modal) var(--ease-out) both;
 }
 
 .modalBackdrop {
@@ -1979,6 +1989,8 @@
   background: white;
   padding: 24px;
   box-shadow: 0 30px 100px rgba(20, 30, 23, 0.28);
+  transform-origin: center;
+  animation: modalEnter var(--motion-modal) var(--ease-out) both;
 }
 
 .confirmBackdrop {
@@ -1991,6 +2003,27 @@
   background: white;
   padding: 24px;
   box-shadow: 0 30px 100px rgba(20, 30, 23, 0.32);
+  animation: modalEnter var(--motion-modal) var(--ease-out) both;
+}
+
+@keyframes backdropEnter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalEnter {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes drawerEnter {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes contentReveal {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .confirmDialog h2 {
@@ -2079,7 +2112,10 @@
   color: var(--ink);
   padding: 13px;
   text-align: left;
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .syncComparison .syncCopyRecommended {
@@ -2090,7 +2126,6 @@
 
 .syncComparison > button:hover:not(:disabled) {
   border-color: #8caf98;
-  transform: translateY(-1px);
 }
 
 .syncComparison .syncCopySelected {
@@ -3212,6 +3247,7 @@
   background: white;
   padding: 26px;
   box-shadow: -30px 0 100px rgba(20, 30, 23, 0.22);
+  animation: drawerEnter var(--motion-drawer) var(--ease-drawer) both;
 }
 
 .planDrawer {
@@ -3533,7 +3569,7 @@
   background: white;
   color: var(--green);
   font-size: 18px;
-  transition: transform 180ms ease;
+  transition: transform var(--motion-fast) var(--ease-out);
 }
 
 .projectContextDetails[open] > summary {
@@ -3813,7 +3849,9 @@
   font-size: 20px;
   font-weight: 900;
   line-height: 1;
-  transition: transform 160ms ease, background 160ms ease;
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    background var(--motion-fast) var(--ease-out);
   user-select: none;
 }
 
@@ -3826,7 +3864,7 @@
 .milestoneCollapseButton span {
   display: block;
   transform: rotate(0deg);
-  transition: transform 160ms ease;
+  transition: transform var(--motion-fast) var(--ease-out);
 }
 
 .milestoneCollapseButtonClosed span {
@@ -3859,6 +3897,7 @@
   display: grid;
   gap: 8px;
   padding: 12px;
+  animation: contentReveal var(--motion-normal) var(--ease-out) both;
 }
 
 .projectTaskEditorShell {
@@ -3873,7 +3912,7 @@
   position: relative;
   z-index: 1;
   background: white;
-  transition: transform 190ms ease;
+  transition: transform 190ms var(--ease-out);
 }
 
 .projectTaskEditorShellSwiped .projectTaskSwipeSurface {
@@ -4450,6 +4489,9 @@
   border-radius: 24px;
   padding: 28px 32px 48px;
   box-shadow: 0 30px 110px rgba(20, 30, 23, 0.3);
+  animation-name: modalEnter;
+  animation-duration: var(--motion-modal);
+  animation-timing-function: var(--ease-out);
 }
 
 .taskDrawerActions {
@@ -4694,6 +4736,7 @@
 
 .taskProgressTrack i {
   display: block;
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(
@@ -4701,7 +4744,8 @@
     var(--task-accent, #e0b957),
     color-mix(in srgb, var(--task-accent, #e0b957) 48%, white)
   );
-  transition: width 240ms ease;
+  transform-origin: left center;
+  transition: transform 240ms var(--ease-out);
 }
 
 .taskProgressComplete {
@@ -4723,20 +4767,19 @@
   justify-content: center;
   gap: 8px;
   color: #91660e;
-  animation: crownReveal 700ms cubic-bezier(0.2, 0.9, 0.25, 1.25) both;
+  animation: crownReveal 360ms var(--ease-out) both;
 }
 
 .crownIcon {
   display: inline-block;
   font-size: 36px;
   filter: drop-shadow(0 7px 9px rgba(184, 132, 21, 0.22));
-  animation: crownFloat 1.8s ease-in-out 700ms infinite;
 }
 
 .crownSparkle {
   color: #e0ad35;
   font-size: 16px;
-  animation: crownSparkle 900ms ease-in-out infinite alternate;
+  animation: crownSparkle 360ms var(--ease-out) both;
 }
 
 .crownSparkle:nth-child(3) {
@@ -4755,11 +4798,7 @@
 @keyframes crownReveal {
   0% {
     opacity: 0;
-    transform: translateY(14px) scale(0.72);
-  }
-  65% {
-    opacity: 1;
-    transform: translateY(-3px) scale(1.08);
+    transform: translateY(8px) scale(0.95);
   }
   100% {
     opacity: 1;
@@ -4767,24 +4806,14 @@
   }
 }
 
-@keyframes crownFloat {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-2deg);
-  }
-  50% {
-    transform: translateY(-5px) rotate(2deg);
-  }
-}
-
 @keyframes crownSparkle {
   from {
-    opacity: 0.35;
-    transform: scale(0.72) rotate(0deg);
+    opacity: 0;
+    transform: scale(0.8) rotate(0deg);
   }
   to {
     opacity: 1;
-    transform: scale(1.2) rotate(24deg);
+    transform: scale(1) rotate(18deg);
   }
 }
 
@@ -5099,14 +5128,17 @@
   font-size: 13px;
   font-weight: 900;
   transition:
-    background 160ms ease,
-    border-color 160ms ease,
-    transform 160ms ease;
+    background var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
 }
 
 .stepCheckButton:hover {
   border-color: #af8c3f;
-  transform: translateY(-1px);
+}
+
+.stepCheckButton:active {
+  transform: scale(0.92);
 }
 
 .stepCheckButtonDone {
@@ -5440,7 +5472,7 @@
 .memoStudioPages .memoStudioPageRow:hover { border-color: #dfe8de; background: #f1f5ef; }
 .memoStudioPages .memoStudioPageActive { border-color: #cfe0d0; background: linear-gradient(120deg, #e9f3e9, #f8faef); }
 .memoStudioPages .memoStudioPageMain { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; flex: 1; min-width: 0; border: 0; background: transparent; padding: 10px 8px; text-align: left; }
-.memoStudioPageDelete { flex: none; display: grid; width: 26px; height: 26px; margin-right: 6px; place-items: center; border: 1px solid #efc9bd; border-radius: 8px; background: #fff8f5; color: #a6533c; font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 150ms ease; }
+.memoStudioPageDelete { flex: none; display: grid; width: 26px; height: 26px; margin-right: 6px; place-items: center; border: 1px solid #efc9bd; border-radius: 8px; background: #fff8f5; color: #a6533c; font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 150ms var(--ease-out); }
 .memoStudioPageRow:hover .memoStudioPageRow:hover .memoStudioPageDelete,
 .memoStudioPageRow:focus-within .memoStudioPageDelete,
 .memoStudioPageDelete:hover { opacity: 1; background: #fdece7; border-color: #e8a996; }
@@ -5800,7 +5832,10 @@
   color: var(--ink);
   text-align: left;
   box-shadow: 0 14px 45px rgba(35, 48, 38, 0.055);
-  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  transition:
+    transform var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .logicPageOpen {
@@ -5829,7 +5864,7 @@
   font-size: 12px;
   font-weight: 800;
   opacity: 0;
-  transition: opacity 160ms ease, background 160ms ease;
+  transition: opacity var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
 
 .logicPageRename {
@@ -5845,7 +5880,7 @@
   font-size: 12px;
   font-weight: 850;
   opacity: 0;
-  transition: opacity 160ms ease, background 160ms ease;
+  transition: opacity var(--motion-fast) var(--ease-out), background var(--motion-fast) var(--ease-out);
 }
 
 .logicPageCard:hover .logicPageDelete,
@@ -5866,7 +5901,6 @@
 
 .logicPageCard:hover {
   border-color: #a9c4b3;
-  transform: translateY(-3px);
   box-shadow: 0 20px 55px rgba(35, 48, 38, 0.1);
 }
 
@@ -5909,11 +5943,31 @@
   background: var(--ink);
   color: var(--lime);
   font-size: 22px;
-  transition: transform 180ms ease;
+  transition: transform var(--motion-fast) var(--ease-out);
 }
 
 .logicPageCard:hover .logicPageArrow {
-  transform: translateX(3px);
+  color: white;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .contextPanelInteractive:hover,
+  .projectCard:hover {
+    transform: translateY(-2px);
+  }
+
+  .dayAgendaTask:hover,
+  .syncComparison > button:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  .logicPageCard:hover {
+    transform: translateY(-3px);
+  }
+
+  .logicPageCard:hover .logicPageArrow {
+    transform: translateX(2px);
+  }
 }
 
 .logicGraphPrototype {
@@ -6424,15 +6478,15 @@
 }
 
 .logicCanvasDive {
-  animation: logic-canvas-dive-out 180ms ease both;
+  animation: logic-canvas-dive-out 180ms var(--ease-out) both;
 }
 
 .logicCanvasBack {
-  animation: logic-canvas-back-out 180ms ease both;
+  animation: logic-canvas-back-out 180ms var(--ease-out) both;
 }
 
 .logicCanvasArrive {
-  animation: logic-canvas-arrive 260ms cubic-bezier(0.22, 0.8, 0.3, 1) backwards;
+  animation: logic-canvas-arrive 240ms var(--ease-out) backwards;
 }
 
 .logicCanvas:active {
@@ -6458,7 +6512,7 @@
   stroke: #aeb7ae;
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
-  transition: stroke 160ms ease, stroke-width 160ms ease;
+  transition: stroke var(--motion-fast) var(--ease-out), stroke-width var(--motion-fast) var(--ease-out);
 }
 
 .logicEdge path {
@@ -6480,7 +6534,7 @@
 .logicEdgeFresh line:not(.logicEdgeHitbox) {
   stroke-dasharray: 800;
   stroke-dashoffset: 800;
-  animation: logic-line-draw 380ms ease forwards;
+  animation: logic-line-draw var(--motion-normal) var(--ease-out) forwards;
 }
 
 .logicEdgeLabel rect {
@@ -6509,7 +6563,7 @@
 .logicNodeRing {
   fill: rgba(31, 106, 73, 0.07);
   opacity: 0;
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition: opacity var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
 }
 
 .logicNodeChildRing {
@@ -6518,13 +6572,12 @@
   stroke-width: 2;
   stroke-dasharray: 3 4;
   vector-effect: non-scaling-stroke;
-  animation: logic-child-ring 12s linear infinite;
 }
 
 .logicNodeDot {
   fill: #1d211d;
   filter: drop-shadow(0 5px 7px rgba(24, 35, 27, 0.16));
-  transition: fill 160ms ease, transform 160ms ease;
+  transition: fill var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out);
 }
 
 .logicNode text {
@@ -6566,7 +6619,7 @@
 .logicNodeFresh {
   transform-box: fill-box;
   transform-origin: center;
-  animation: logic-node-pop 320ms cubic-bezier(0.22, 1.35, 0.38, 1);
+  animation: logic-node-pop var(--motion-normal) var(--ease-out);
 }
 
 .logicInspector {
@@ -6588,7 +6641,7 @@
   cursor: default;
   user-select: text;
   backdrop-filter: blur(18px);
-  animation: logic-panel-enter 220ms ease;
+  animation: logic-panel-enter var(--motion-normal) var(--ease-out);
 }
 
 .logicInspectorHeader {
@@ -7162,6 +7215,7 @@
   background: rgba(21, 29, 23, 0.46);
   padding: 20px;
   backdrop-filter: blur(7px);
+  animation: backdropEnter var(--motion-modal) var(--ease-out) both;
 }
 
 .logicDialog {
@@ -7173,7 +7227,7 @@
   background: white;
   padding: 24px;
   box-shadow: 0 28px 90px rgba(20, 30, 23, 0.25);
-  animation: logic-dialog-enter 220ms ease;
+  animation: logic-dialog-enter var(--motion-modal) var(--ease-out);
 }
 
 .logicDialog h3 {
@@ -7193,8 +7247,7 @@
 }
 
 @keyframes logic-node-pop {
-  0% { opacity: 0; transform: scale(0.35); }
-  70% { opacity: 1; transform: scale(1.12); }
+  0% { opacity: 0; transform: scale(0.95); }
   100% { opacity: 1; transform: scale(1); }
 }
 
@@ -7208,12 +7261,8 @@
 }
 
 @keyframes logic-dialog-enter {
-  from { opacity: 0; transform: translateY(12px) scale(0.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@keyframes logic-child-ring {
-  to { stroke-dashoffset: -120; }
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes logic-canvas-dive-out {
@@ -8130,10 +8179,49 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation: none !important;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
-    transition: none !important;
+  }
+
+  .modalBackdrop,
+  .drawerBackdrop,
+  .modal,
+  .drawer,
+  .confirmDialog,
+  .logicOverlay,
+  .logicDialog,
+  .logicNodeFresh,
+  .logicEdgeFresh line:not(.logicEdgeHitbox),
+  .logicCanvasDive,
+  .logicCanvasBack,
+  .logicCanvasArrive,
+  .taskList,
+  .projectMilestoneTasks,
+  .crownReward,
+  .crownSparkle {
+    animation: none !important;
+  }
+
+  .progressTrack i,
+  .taskProgressBar i,
+  .taskProgressTrack i,
+  .projectContextDetails > summary b,
+  .taskGroupCollapseButton span,
+  .milestoneCollapseButton span {
+    transition-duration: 0ms !important;
+  }
+
+  .contextPanelInteractive:hover,
+  .dayAgendaTask:hover,
+  .projectCard:hover,
+  .syncComparison > button:hover:not(:disabled),
+  .logicPageCard:hover,
+  .logicPageCard:hover .logicPageArrow {
+    transform: none !important;
   }
 }
   .projectPicker {
